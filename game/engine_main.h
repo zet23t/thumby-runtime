@@ -6,9 +6,15 @@
 typedef struct RuntimeContext
 {
     uint32_t screenData[128*128];
-    uint8_t rgbLightRed:1;
-    uint8_t rgbLightGreen:1;
-    uint8_t rgbLightBlue:1;
+    union {
+        uint8_t flags;
+        struct {
+            uint8_t rgbLightRed:1;
+            uint8_t rgbLightGreen:1;
+            uint8_t rgbLightBlue:1;
+        };
+    };
+    float rumbleIntensity;
 
     union {
         uint32_t inputState;
@@ -25,6 +31,7 @@ typedef struct RuntimeContext
             uint32_t inputMenu:1;
         };
     };
+
     union {
         uint32_t previousInputState;
         struct

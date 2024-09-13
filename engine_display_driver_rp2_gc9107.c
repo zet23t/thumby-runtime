@@ -1,6 +1,6 @@
 #include "engine_display_driver_rp2_gc9107.h"
 #include "engine_display_common.h"
-#include "debug/debug_print.h"
+// #include "debug/debug_print.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -88,15 +88,15 @@ void gc9107_reset_window(){
 
 
 void engine_display_gc9107_init(){
-    ENGINE_INFO_PRINTF("Setting up GC9107 screen");
+    // ENGINE_INFO_PRINTF("Setting up GC9107 screen");
 
     // Init SPI
-    ENGINE_INFO_PRINTF("Enabling SPI");
+    // ENGINE_INFO_PRINTF("Enabling SPI");
     spi_init(spi0, GC9107_SPI_MHZ);
 
     // Init pins (some are controlled through SPI peripheral
     // and some are controlled through code using GPIO)
-    ENGINE_INFO_PRINTF("Enabling pins");
+    // ENGINE_INFO_PRINTF("Enabling pins");
     gpio_set_function(PIN_GP19_SPI0_TX__TO__SDA, GPIO_FUNC_SPI);
     gpio_set_function(PIN_GP18_SPI0_SCK__TO__CLK, GPIO_FUNC_SPI);
 
@@ -211,7 +211,7 @@ void engine_display_gc9107_init(){
     // // OLD demo code from wider connector screen version
 
     // Grab unused dma channel for SPI TX
-    ENGINE_INFO_PRINTF("Enabling DMA for 16-bit transfers");
+    // ENGINE_INFO_PRINTF("Enabling DMA for 16-bit transfers");
     dma_tx = dma_claim_unused_channel(true);
 
     // Configure the DMA channel (for SPI TX)
@@ -225,7 +225,7 @@ void engine_display_gc9107_init(){
 
 void engine_display_gc9107_update(uint16_t *screen_buffer_to_render){
     if(dma_channel_is_busy(dma_tx)){
-        ENGINE_WARNING_PRINTF("Waiting on previous DMA transfer to complete. Could have done more last frame!");
+        // ENGINE_WARNING_PRINTF("Waiting on previous DMA transfer to complete. Could have done more last frame!");
         dma_channel_wait_for_finish_blocking(dma_tx);
     }
 

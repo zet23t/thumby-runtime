@@ -1,0 +1,21 @@
+#ifndef fnt_tiny_H
+#define fnt_tiny_H
+#include <inttypes.h>
+extern const uint16_t fnt_tiny_width;
+extern const uint16_t fnt_tiny_height;
+extern const uint8_t fnt_tiny_p2width;
+extern const uint8_t fnt_tiny_p2height;
+extern const uint32_t fnt_tiny_data_size;
+extern const uint8_t fnt_tiny_data[];
+extern const uint16_t fnt_tiny_glyph_count;
+extern const uint16_t fnt_tiny_glyph_padding;
+extern const uint16_t fnt_tiny_base_size;
+extern const uint16_t fnt_tiny_glyphs_values[];
+extern const uint8_t fnt_tiny_glyphs_offsets_x[];
+extern const uint8_t fnt_tiny_glyphs_offsets_y[];
+extern const uint8_t fnt_tiny_glyphs_advances_x[];
+extern const uint16_t fnt_tiny_glyphs_rects_x[];
+extern const uint16_t fnt_tiny_glyphs_rects_y[];
+extern const uint8_t fnt_tiny_glyphs_rects_width[];
+extern const uint8_t fnt_tiny_glyphs_rects_height[];
+#endif

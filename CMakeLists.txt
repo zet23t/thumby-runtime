@@ -29,6 +29,11 @@ if (PICO_SDK_VERSION_STRING VERSION_LESS "1.4.0")
   message(FATAL_ERROR "Raspberry Pi Pico SDK version 1.4.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
 endif()
 
+include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_pwm/include)
+include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_spi/include)
+include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_dma/include)
+include_directories(${CMAKE_SOURCE_DIR}/_src_gen) 
+
 project(blink C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
@@ -38,10 +43,31 @@ pico_sdk_init()
 
 add_executable(blink
     blink.c
+    _src_gen/atlas.c
+    _src_gen/fnt_medium.c
+    _src_gen/fnt_myfont.c
+    _src_gen/fnt_tiny.c
+    game/game_assets.c
+    game/game.c
+    game/engine_main.c
+    game/game_character.c
+    game/game_enemies.c
+    game/game_environment.c
+    game/game_menu.c
+    game/game_particlesystem.c
+    game/game_player.c
+    game/game_projectile.c
+    game/game_scene_3.c
+    game/game_scenes.c
+    game/TE_Image.c
+    game/TE_Font.c
+    game/TE_math.c
+    game/TE_rand.c
+    game/TE_sdfmap.c
     )
 
 # pull in common dependencies
-target_link_libraries(blink pico_stdlib)
+target_link_libraries(blink pico_stdlib hardware_dma hardware_spi)
 
 if (PICO_CYW43_SUPPORTED)
     target_link_libraries(blink pico_cyw43_arch_none)

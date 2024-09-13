@@ -4,7 +4,9 @@
 #include <pico/types.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <game/game.h>
+#include "game/game.h"
+
+#include "engine_display_driver_rp2_gc9107.c"
 
 #define PI      3.14159265358979323846f
 #define HALF_PI 1.57079632679489661923f
@@ -30,8 +32,8 @@
 
 RuntimeContext runtimeContext;
 
-void RuntimeContext_setup(){
-    ENGINE_PRINTF("EngineInput: Setting up...\n");
+void RuntimeContext_init(){
+    //ENGINE_PRINTF("EngineInput: Setting up...\n");
 
     gpio_init(GPIO_BUTTON_DPAD_UP);
     gpio_init(GPIO_BUTTON_DPAD_LEFT);
@@ -80,10 +82,53 @@ void RuntimeContext_setup(){
     pwm_config_set_wrap(&rumble_pwm_pin_config, 2048);   // 125MHz / 1024 = 122kHz
     pwm_init(rumple_pwm_pin_slice, &rumble_pwm_pin_config, true);
     pwm_set_gpio_level(GPIO_RUMBLE, 0);
+
+    engine_display_gc9107_init();
 }
 
 
-void RuntimeContext_update(){
+float engine_math_map(float value, float in_min, float in_max, float out_min, float out_max){
+    float in_range = in_max - in_min;
+    if(in_range == 0.0f){
+        return (out_max - out_min) / 2.0f;
+    }
+    return (value - in_min) * (out_max - out_min) / in_range + out_min;
+}
+
+float engine_math_map_clamp(float value, float in_min, float in_max, float out_min, float out_max){
+    if(value <= in_min){
+        return out_min;
+    }
+    if(value >= in_max){
+        return out_max;
+    }
+    return engine_math_map(value, in_min, in_max, out_min, out_max);
+}
+
+static void Runtime_upload_rgba8_rgb16()
+{
+    uint16_t buffer[128 * 128];
+    // converting 8-bit RGBA to 5-6-5 RGB
+    for (int i = 0; i < 128 * 128; i++)
+    {
+        uint32_t abgr = runtimeContext.screenData[i];
+        uint8_t r5 = (abgr & 0x00FF0000) >> 19;
+        uint8_t g6 = (abgr & 0x0000FF00) >> 10;
+        uint8_t b5 = (abgr & 0x000000FF) >> 3;
+        buffer[i] = (b5 << 11) | (g6 << 5) | r5;
+    }
+    engine_display_gc9107_update(buffer);
+}
+
+RuntimeContext* RuntimeContext_update(){
+    float current_time = time_us_32() / 1000000.0f;
+    if (runtimeContext.frameCount > 0)
+    {
+        runtimeContext.deltaTime = current_time - runtimeContext.time;
+    }
+    runtimeContext.time = current_time;
+    runtimeContext.frameCount++;
+    
     runtimeContext.previousInputState = runtimeContext.inputState;
 
     runtimeContext.inputUp = gpio_get(GPIO_BUTTON_DPAD_UP) == false;
@@ -99,23 +144,20 @@ void RuntimeContext_update(){
     
     runtimeContext.inputMenu = gpio_get(GPIO_BUTTON_MENU) == false;
 
-    gpio_put(GPIO_LED_R, runtimeContext.rgbLightRed);
-    gpio_put(GPIO_LED_G, runtimeContext.rgbLightGreen);
-    gpio_put(GPIO_LED_B, runtimeContext.rgbLightBlue);
+    gpio_put(GPIO_LED_R, !runtimeContext.rgbLightRed);
+    gpio_put(GPIO_LED_G, !runtimeContext.rgbLightGreen);
+    gpio_put(GPIO_LED_B, !runtimeContext.rgbLightBlue);
+
+    if(runtimeContext.rumbleIntensity <= EPSILON){
+        pwm_set_gpio_level(GPIO_RUMBLE, 0);
+    }else{
+        pwm_set_gpio_level(GPIO_RUMBLE, (uint32_t)engine_math_map_clamp(runtimeContext.rumbleIntensity, 0.0f, 1.0f, 1400.0f, 2048.0f));
+    }
+
+    Runtime_upload_rgba8_rgb16();
+    return &runtimeContext;
 }
 
-
-
-
-float engine_math_map_clamp(float value, float in_min, float in_max, float out_min, float out_max){
-    if(value <= in_min){
-        return out_min;
-    }
-    if(value >= in_max){
-        return out_max;
-    }
-    return engine_math_map(value, in_min, in_max, out_min, out_max);
-}
 
 void engine_io_rp3_rumble(float intensity){
     if(intensity <= EPSILON){
