@@ -53,12 +53,20 @@ int main() {
     int rc = pico_led_init();
     hard_assert(rc == PICO_OK);
     int bits = 0;
-    float t = 0;
+    uint32_t prevTime = time_us_32();
+    
     init();
     while (true) {
-        t += 0.1f;
-
+        uint32_t currentTime = time_us_32();
+        //cap to 60fps
+        while (currentTime - prevTime < 16666) {
+            sleep_us(16666 - (currentTime - prevTime));
+            currentTime = time_us_32();
+        }
+        prevTime = currentTime;
+        
         RuntimeContext *ctx = RuntimeContext_update();
+        ctx->getUTime = time_us_32;
         // TE_Img img = (TE_Img) {
         //     .p2width = 7,
         //     .p2height = 7,
@@ -86,9 +94,9 @@ int main() {
         if (ctx->inputUp) {
                 ctx->rgbLightGreen |= ctx->rgbLightRed = 1;
         }
-        ctx->rumbleIntensity =
-        ctx->rumbleIntensity * .99f +
-         ((ctx->inputShoulderLeft ? 0.5f : 0.0f) + (ctx->inputShoulderRight ? 0.5f : 0.0f)) * .01f;
+        // ctx->rumbleIntensity =
+        // ctx->rumbleIntensity * .99f +
+        //  ((ctx->inputShoulderLeft ? 0.5f : 0.0f) + (ctx->inputShoulderRight ? 0.5f : 0.0f)) * .01f;
 
         update(ctx);
 
