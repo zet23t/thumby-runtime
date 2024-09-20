@@ -39,7 +39,8 @@ project(blink C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# add_compile_options(-mfloat-abi=hard -mfpu=fpv4-sp-d16)
+# add_compile_options(-mfloat-abi=hard -mfpu=auto)
+# add_compile_options( --with-fpu )
 
 # Add executable. Default name is the project name, version 0.1
 
@@ -59,6 +60,7 @@ add_executable(blink
     game/game_particlesystem.c
     game/game_player.c
     game/game_projectile.c
+    game/game_scene_0_testing.c
     game/game_scene_3.c
     game/game_scenes.c
     game/TE_Image.c

@@ -67,36 +67,15 @@ int main() {
         
         RuntimeContext *ctx = RuntimeContext_update();
         ctx->getUTime = time_us_32;
-        // TE_Img img = (TE_Img) {
-        //     .p2width = 7,
-        //     .p2height = 7,
-        //     .data = ctx->screenData
-        // };
-
-        // TE_Font font = GameAssets_getFont(FONT_LARGE);
-
-
-        // TE_Img_clear(&img, 0, 0);
-        // TE_Font_drawTextBox(&img, &font, 30, 30,80, 60, 1, 12, "Hello, World!", 0.0f, 0.0f, 0xffffffff, 
-        //     (TE_ImgOpState) {
-        //         .zValue = 5
-        //     });
-        // TE_Sprite sprite = GameAssets_getSprite(SPRITE_UI_SWORD);
-        // TE_Img_blitSprite(&img, sprite, 2, 2, (BlitEx) {
-        //     .blendMode = TE_BLEND_ALPHAMASK,
-        //     .state.zValue = 8
-        // });
-
+        
         ctx->flags = 0;
+        // debug output controls to LED for now
         ctx->rgbLightRed = ctx->inputRight;
         ctx->rgbLightGreen = ctx->inputLeft;
         ctx->rgbLightBlue = ctx->inputDown;
         if (ctx->inputUp) {
                 ctx->rgbLightGreen |= ctx->rgbLightRed = 1;
         }
-        // ctx->rumbleIntensity =
-        // ctx->rumbleIntensity * .99f +
-        //  ((ctx->inputShoulderLeft ? 0.5f : 0.0f) + (ctx->inputShoulderRight ? 0.5f : 0.0f)) * .01f;
 
         update(ctx);
 
