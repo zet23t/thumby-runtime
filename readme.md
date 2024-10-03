@@ -1,0 +1,1 @@
+This is a "temporary" hack project to compile and upload my game project to the Thumby Color.
