@@ -71,10 +71,10 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
         // player->y = floorf(player->y) + frac;
         // printf_s("Diagonal movement %f %f\n", player->x, player->y);
     }
-    if (ctx->inputA)
-    {
-        multiplier *= 0.5f;
-    }
+    // if (ctx->inputA)
+    // {
+    //     // multiplier *= 0.5f;
+    // }
     player->x += player->dx * ctx->deltaTime * multiplier;
     player->y += player->dy * ctx->deltaTime * multiplier;
 
@@ -110,7 +110,7 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
     Item *item = &items[_playerWeaponIndex > 0 ? _playerWeaponIndex - 1 : 0];
     float coolDown = item->cooldown;
 
-    if (ctx->inputA && _playerWeaponIndex)
+    if (ctx->inputA && 0 && _playerWeaponIndex)
     {
         playerCharacter->isAiming = 1;
         // playerCharacter->itemRightHand = -2;
@@ -122,7 +122,7 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
             percent = 1.0f;
             color = ctx->frameCount / 4 % 2 == 0 ? 0xff0000ff : 0xffffffff;
         }
-        float len = percent * 16.0f;
+        // float len = percent * 16.0f;
         float sdx = tdx;
         float sdy = tdy;
         float sdLen = sqrtf(sdx * sdx + sdy * sdy);
@@ -259,8 +259,19 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
     {
         targetX = playerCharacter->targetX;
         targetY = playerCharacter->targetY;
-        dirX = playerCharacter->x < targetX ? 1 : (playerCharacter->x > targetX ? -1 : playerCharacter->dirX);
-        dirY = playerCharacter->y < targetY ? 1 : (playerCharacter->y > targetY ? -1 : playerCharacter->dirY);
+        float dx = targetX - playerCharacter->x;
+        float dy = targetY - playerCharacter->y;
+        float sqLen = dx * dx + dy * dy;
+        if (sqLen > 0.01f)
+        {
+            dirX = sign_f(dx);
+            dirY = sign_f(dy);
+        }
+        else
+        {
+            dirX = playerCharacter->dirX;
+            dirY = playerCharacter->dirY;
+        }
         // TE_Logf("DBG", "Player target %f %f : %f %f", targetX, targetY, player->dirX, player->dirY);
     }
     Character_update(playerCharacter, ctx, img, targetX, targetY, dirX, dirY);

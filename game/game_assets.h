@@ -3,6 +3,7 @@
 
 #include "TE_Image.h"
 #include "TE_Font.h"
+#include "game_renderobjects.h"
 
 #define SPRITE_ROBIN_HEAD_FRONT 1
 #define SPRITE_CART_WHEEL_SIDE 2
@@ -29,6 +30,39 @@
 #define SPRITE_TEXT_OW 23
 #define SPRITE_TEXT_OOF 24
 #define SPRITE_TEXT_BANG 25
+#define SPRITE_TREE_FOLLIAGE_1 26
+#define SPRITE_TREE_FOLLIAGE_2 27
+#define SPRITE_TREE_FOLLIAGE_3 28
+#define SPRITE_TREE_FOLLIAGE_4 29
+#define SPRITE_TREE_FOLLIAGE_SMALL_1 30
+#define SPRITE_TREE_FOLLIAGE_SMALL_2 31
+#define SPRITE_TREE_FOLLIAGE_SMALL_3 32
+#define SPRITE_TREE_FOLLIAGE_SMALL_4 33
+#define SPRITE_FLAT_ARROW_RIGHT 34
+#define SPRITE_FLAT_ARROW_LEFT 35
+#define SPRITE_FLAT_ARROW_UP 36
+#define SPRITE_FLAT_ARROW_DOWN 37
+#define SPRITE_FLAT_ARROW_UP_LEFT 38
+#define SPRITE_FLAT_ARROW_UP_RIGHT 39
+#define SPRITE_FLAT_ARROW_DOWN_LEFT 40
+#define SPRITE_FLAT_ARROW_DOWN_RIGHT 41
+#define SPRITE_FLAT_ARROW_2_0000 42
+#define SPRITE_FLAT_ARROW_2_0225 43
+#define SPRITE_FLAT_ARROW_2_0450 44
+#define SPRITE_FLAT_ARROW_2_0675 45
+#define SPRITE_FLAT_ARROW_2_0900 46
+#define SPRITE_FLAT_ARROW_2_1125 47
+#define SPRITE_FLAT_ARROW_2_1350 48
+#define SPRITE_FLAT_ARROW_2_1575 49
+#define SPRITE_FLAT_ARROW_2_1800 50
+#define SPRITE_FLAT_ARROW_2_2025 51
+#define SPRITE_FLAT_ARROW_2_2250 52
+#define SPRITE_FLAT_ARROW_2_2475 53
+#define SPRITE_FLAT_ARROW_2_2700 54
+#define SPRITE_FLAT_ARROW_2_2925 55
+#define SPRITE_FLAT_ARROW_2_3150 56
+#define SPRITE_FLAT_ARROW_2_3375 57
+#define SPRITE_CHARACTER_SHADOW 58
 
 #define FONT_MEDIUM 0
 #define FONT_LARGE 1
@@ -41,8 +75,12 @@
 #define ANIMATION_STAFF_ATTACK_HIT 5
 #define ANIMATION_STAFF_AIM 6
 
+#define RENDER_PREFAB_TREE 1
+
+TE_Img *GameAssets_getAtlasImg(void);
 TE_Sprite GameAssets_getSprite(uint8_t index);
 TE_Font GameAssets_getFont(uint8_t index);
 int GameAssets_drawAnimation(uint8_t index, TE_Img *dst, uint32_t msTick, int16_t x, int16_t y, int maxLoopCount, BlitEx blitEx);
+RenderPrefab* GameAssets_getRenderPrefab(uint8_t index, uint8_t variant);
 
 #endif

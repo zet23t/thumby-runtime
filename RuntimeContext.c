@@ -105,9 +105,11 @@ float engine_math_map_clamp(float value, float in_min, float in_max, float out_m
     return engine_math_map(value, in_min, in_max, out_min, out_max);
 }
 
-static uint16_t buffer[128 * 128];
+static uint16_t screenBuffer[128 * 128];
 static void Runtime_upload_rgba8_rgb16()
 {
+    // overwrite existing pixels; we won't read it any more.
+    uint16_t *buffer = screenBuffer;
     // converting 8-bit RGBA to 5-6-5 RGB
     for (int i = 0; i < 128 * 128; i++)
     {

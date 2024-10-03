@@ -36,3 +36,28 @@ int absi(int a)
 {
     return a < 0 ? -a : a;
 }
+
+
+int16_t max_s16(int16_t a, int16_t b)
+{
+    return a > b ? a : b;
+}
+int16_t min_s16(int16_t a, int16_t b)
+{
+    return a < b ? a : b;
+}
+
+float max_f(float a, float b)
+{
+    return a > b ? a : b;
+}
+
+float min_f(float a, float b)
+{
+    return a < b ? a : b;
+}
+
+float sign_f(float a)
+{
+    return a < 0.0f ? -1.0f : (a > 0.0f ? 1.0f : 0.0f);
+}

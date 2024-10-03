@@ -1,10 +1,14 @@
 # Generated Cmake Pico project file
 
 cmake_minimum_required(VERSION 3.13)
+set(CMAKE_BUILD_TYPE Release)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Define LIB_PICO_STDIO_USB to enable USB serial output
+add_definitions(-DLIB_PICO_STDIO_USB=1)
 
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
@@ -39,9 +43,6 @@ project(blink C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# add_compile_options(-mfloat-abi=hard -mfpu=auto)
-# add_compile_options( --with-fpu )
-
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(blink
@@ -50,6 +51,7 @@ add_executable(blink
     _src_gen/fnt_medium.c
     _src_gen/fnt_myfont.c
     _src_gen/fnt_tiny.c
+    _src_gen/fnt_mymono.c
     game/game_assets.c
     game/game.c
     game/engine_main.c
@@ -63,6 +65,9 @@ add_executable(blink
     game/game_scene_0_testing.c
     game/game_scene_3.c
     game/game_scenes.c
+    game/game_renderobjects.c
+    game/game_battle_actions.c
+    game/game_battle.c
     game/TE_Image.c
     game/TE_Font.c
     game/TE_math.c
@@ -71,7 +76,7 @@ add_executable(blink
     )
 
 # pull in common dependencies
-target_link_libraries(blink pico_stdlib hardware_dma hardware_spi)
+target_link_libraries(blink pico_stdlib hardware_dma hardware_spi pico_stdio_usb)
 
 if (PICO_CYW43_SUPPORTED)
     target_link_libraries(blink pico_cyw43_arch_none)

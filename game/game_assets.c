@@ -5,6 +5,7 @@
 #include "fnt_myfont.h"
 #include "game_particlesystem.h"
 #include "TE_rand.h"
+#include "TE_math.h"
 
 typedef struct SpriteData
 {
@@ -42,6 +43,39 @@ static const SpriteData _sprites[] = {
     {84, 138, 21, 13, 10, 6}, // TEXT_OW
     {84, 151, 20, 14, 10, 7}, // TEXT_OOF
     {56, 161, 25, 18, 12, 9}, // TEXT_BANG
+    {0, 0, 8, 8, 3, 3},       // TREE_FOLLIAGE_1
+    {8, 0, 8, 8, 3, 3},       // TREE_FOLLIAGE_2
+    {0, 8, 8, 8, 3, 3},       // TREE_FOLLIAGE_3
+    {8, 8, 8, 8, 3, 3},       // TREE_FOLLIAGE_4
+    {0, 16, 4, 4, 2, 2},      // TREE_FOLLIAGE_SMALL_1
+    {0, 24, 4, 4, 2, 2},      // TREE_FOLLIAGE_SMALL_2
+    {8, 16, 4, 4, 2, 2},      // TREE_FOLLIAGE_SMALL_3
+    {8, 24, 4, 4, 2, 2},      // TREE_FOLLIAGE_SMALL_4
+    {112, 184, 5, 8, 4, 3},   // FLAT_ARROW_RIGHT
+    {117, 184, 5, 8, 0, 3},   // FLAT_ARROW_LEFT
+    {129, 185, 7, 6, 3, 0},   // FLAT_ARROW_UP
+    {122, 185, 7, 6, 3, 5},   // FLAT_ARROW_DOWN
+    {112, 192, 6, 7, 0, 0},   // FLAT_ARROW_UP_LEFT
+    {118, 192, 6, 7, 5, 0},   // FLAT_ARROW_UP_RIGHT
+    {124, 192, 6, 7, 0, 6},   // FLAT_ARROW_DOWN_LEFT
+    {130, 192, 6, 7, 5, 6},   // FLAT_ARROW_DOWN_RIGHT
+    {248, 0, 7, 8, 4, 4},     // SPRITE_FLAT_ARROW_2_0000
+    {248, 8, 7, 8, 4, 4},     // SPRITE_FLAT_ARROW_2_0225
+    {248, 16, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_0450
+    {248, 24, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_0675
+    {248, 32, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_0900
+    {248, 40, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_1125
+    {248, 48, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_1350
+    {248, 56, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_1575
+    {248, 64, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_1800
+    {248, 72, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_2025
+    {248, 80, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_2250
+    {248, 88, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_2475
+    {248, 96, 7, 8, 4, 4},    // SPRITE_FLAT_ARROW_2_2700
+    {248, 104, 7, 8, 4, 4},   // SPRITE_FLAT_ARROW_2_2925
+    {248, 112, 7, 8, 4, 4},   // SPRITE_FLAT_ARROW_2_3150
+    {248, 120, 7, 8, 4, 4},   // SPRITE_FLAT_ARROW_2_3375
+    {16, 136, 12, 6, 6, 3},   // SPRITE_CHARACTER_SHADOW
 };
 
 static SpriteData _getSpriteData(uint8_t index)
@@ -68,7 +102,7 @@ static int DrawAnimation_HAHAHA(TE_Img *dst, uint32_t msTick, uint8_t spriteId, 
     // for (int n=0; n<2; n++)
     // {
     msTick *= 2;
-    if (msTick >= HAHA_FRAME_DURATION * 5 * loopCount - 2)
+    if (msTick + 2 >= (uint32_t)(HAHA_FRAME_DURATION * 5 * loopCount))
         return 0;
 
     int ftime = msTick % (HAHA_FRAME_DURATION * 5);
@@ -97,7 +131,7 @@ static int DrawAnimation_HAHAHA(TE_Img *dst, uint32_t msTick, uint8_t spriteId, 
 static int DrawAnimation_STAFF_HIT(TE_Img *dst, uint32_t msTick, int16_t x, int16_t y, int maxLoopCount, int isHit, BlitEx blitEx)
 {
     uint32_t frame = msTick / STAFF_HIT_FRAME_DURATION;
-    if (frame >= 6 * maxLoopCount)
+    if (frame >= (uint32_t) (6 * maxLoopCount))
         return 0;
     frame %= 6;
     // TE_Debug_drawPixel(x, y, 0xffff00ff);
@@ -215,4 +249,262 @@ TE_Font GameAssets_getFont(uint8_t index)
         return mediumfont;
     }
     }
+}
+
+TE_Img *GameAssets_getAtlasImg(void)
+{
+    return &atlasImg;
+}
+
+static uint8_t GameAssets_tryFindSpot(RenderPrefab *prefab, int8_t tries, int16_t x, int16_t y, 
+    int8_t scatterX, int8_t scatterY, int8_t rangeTestX, int8_t rangeTestY, uint8_t stepX, uint8_t stepY,
+    uint8_t maxFillCount, uint8_t isMinCount, int16_t *outX, int16_t *outY)
+{
+    for (int i=0;i<tries;i++)
+    {
+        int16_t px = x + TE_randRange(-scatterX, scatterX);
+        int16_t py = y + TE_randRange(-scatterY, scatterY);
+        uint8_t fillCount = 0;
+        for (int16_t sampleX = px - rangeTestX; sampleX <= px + rangeTestX; sampleX += stepX)
+        {
+            for (int16_t sampleY = py - rangeTestY; sampleY <= py + rangeTestY; sampleY += stepY)
+            {
+                if (RenderPrefab_getColorAt(prefab, sampleX, sampleY, 0, 0) != 0)
+                {
+                    if (++fillCount >= maxFillCount && !isMinCount)
+                        goto reject;
+                }
+            }
+        }
+        if (isMinCount && fillCount < maxFillCount)
+            goto reject;
+        *outX = px;
+        *outY = py;
+        return 1;
+        reject:
+    }
+    return 0;
+}
+
+typedef struct TreeSpawnData
+{
+    TE_Vector2_s8 positions[6];
+    uint8_t leafCount;
+} TreeSpawnData;
+
+static uint32_t _leafSpawnSeed = 123;
+static void GameAssets_treeSpawnLeafs(RuntimeContext *ctx, TE_Img* screen, void *data, int16_t x, int16_t y, int8_t z)
+{
+    if (!ctx) return;
+    uint32_t seed = TE_randSetSeed(_leafSpawnSeed);
+    TreeSpawnData *spawnData = (TreeSpawnData*)data;
+    if (spawnData->leafCount && TE_randRange(0, 300) < 1)
+    {
+        uint8_t selectIndex = TE_randRange(0, spawnData->leafCount);
+        TE_Vector2_s8 pos = spawnData->positions[selectIndex];
+        ParticleSystem_spawn(PARTICLE_TYPE_LEAF, pos.x+ x, pos.y + y, pos.y + 8 + y, 0, 0, (ParticleTypeData){
+            .simpleType = {
+                .color = DB32Colors[DB32_YELLOW],
+                .accelY = 40.0f,
+                .drag = 3.0f,
+                .maxLife = TE_randRange(10, 100) * 0.05f,
+            }
+        });
+    }
+    _leafSpawnSeed = TE_randSetSeed(seed);
+}
+
+static RenderPrefab* GameAssets_createTreePrefab(uint16_t id)
+{
+    uint32_t oldSeed = TE_randSetSeed(id + 2);
+    LOG("Creating tree prefab %d", id);
+    RenderPrefab *prefab = RenderPrefab_create((RenderObjectCounts){
+        .spriteMaxCount = 40,
+        .atlasBlitSkewXMaxCount = 1,
+        .functionCallMaxCount = 1
+    });
+    prefab->id = id;
+
+    int8_t x = 0;
+    int8_t y = -16;
+    
+    // Foliage bright green top
+    TreeSpawnData *spawnData = RenderObject_malloc(sizeof(TreeSpawnData));
+    spawnData->leafCount = 0;
+    for (int i=0; i < 7;i++) {
+        int16_t px, py;
+        if (!GameAssets_tryFindSpot(prefab, 10, x, y, 6, 8, 1, 1, 2, 2, 1, 0, &px, &py)) continue;
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+            .x = px,
+            .y = py,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = DB32Colors[30],
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zValue = 8 - py
+            }
+        });
+
+        // shadows
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+            .x = px - py / 2,
+            .y = -py / 2,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = 0x44000000,
+                .absZ = 1,
+                .state.zValue = 8,
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zAlphaBlend = 1,
+            }
+        });
+            
+        spawnData->positions[spawnData->leafCount++] = (TE_Vector2_s8){.x = px, .y = py};
+    }
+
+    RenderPrefab_addFunctionCall(prefab, (RenderObjectFunctionCall) {
+        .function = GameAssets_treeSpawnLeafs,
+        .data = spawnData
+    });
+
+    // bright highlights
+    for (int i=0; i < 4;i++) {
+        int16_t px, py;
+        if (!GameAssets_tryFindSpot(prefab, 10, x - 3, y - 5, 6, 6, 1, 1, 2, 2, 3, 1, &px, &py)) continue;
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_SMALL_1, SPRITE_TREE_FOLLIAGE_SMALL_4 + 1),
+            .x = px,
+            .y = py,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = DB32Colors[8],
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zValue = 13 - py
+            }
+        });
+    }
+    x+=1;
+    y += 1;
+    
+    for (int i=0; i < 6;i++) {
+        int16_t px, py;
+        if (!GameAssets_tryFindSpot(prefab, 10, x, y, 9, 6, 0, 0, 1, 1, 1,0, &px, &py)) continue;
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+            .x = px,
+            .y = py,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = DB32Colors[12],
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zValue = 7 - py + TE_randRange(-1,2)
+            }
+        });
+    }
+
+    x+=1;
+    y+=2;
+
+    for (int i=0; i < 6;i++) {
+        int16_t px, py;
+        if (!GameAssets_tryFindSpot(prefab, 10, x, y, 6, 4, 0, 0, 1, 1, 1,0, &px, &py)) continue;
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+            .x = px,
+            .y = py,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = DB32Colors[14],
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zValue = 7 - py
+            }
+        });
+    }
+    // darkest leafs
+    for (int i=0; i < 6;i++) {
+        int16_t px, py;
+        if (!GameAssets_tryFindSpot(prefab, 10, x, y+2, 8, 6, 0, 0, 2, 2, 3,0, &px, &py)) continue;
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+            .x = px,
+            .y = py,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = DB32Colors[1],
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zValue = 7 - py
+            }
+        });
+
+        // shadows
+        RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+            .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+            .x = px - py / 2,
+            .y = -py / 2,
+            .blitEx = {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = 0x33000000,
+                .absZ = 1,
+                .state.zValue = 8,
+                .state.zCompareMode = Z_COMPARE_LESS,
+                .state.zAlphaBlend = 1,
+            }
+        });
+    }
+
+    // Trunk
+    RenderPrefab_addAtlasBlitSkewX(prefab, (RenderObjectAtlasBlitSkew) {
+        .srcX = 16 * TE_randRange(1,3), .srcY = 48,
+        .width = 16, .height = 16,
+        .x1 = TE_randRange(-12,-4), .y1 = -12,
+        .x2 = -6, .y2 = 4,
+        .blitEx = {
+            .blendMode = TE_BLEND_ALPHAMASK,
+            .state.zCompareMode = Z_COMPARE_LESS,
+            .state.zValue = 8
+        }
+    });
+
+    // x = 6;
+    // y = -4;
+    // for (int i=0;i<3;i++)
+    //     RenderPrefab_addSprite(prefab, (RenderObjectSprite){
+    //         .spriteIndex = TE_randRange(SPRITE_TREE_FOLLIAGE_1, SPRITE_TREE_FOLLIAGE_4 + 1),
+    //         .x = TE_randRange(-8 + x, 8 + y),
+    //         .y = TE_randRange(-8 + x, 8 + y),
+    //         .blitEx = {
+    //             .blendMode = TE_BLEND_ALPHAMASK,
+    //             .tint = 1,
+    //             .tintColor = DB32Colors[DB32_DARKGREEN],
+    //             .state.zCompareMode = Z_COMPARE_LESS,
+    //             .state.zValue = 8
+    //         }
+    //     });
+    
+    TE_randSetSeed(oldSeed);
+    return prefab;
+}
+
+RenderPrefab* GameAssets_getRenderPrefab(uint8_t id, uint8_t variant)
+{
+    RenderPrefab *prefab = RenderPrefab_getFirstById(id);
+    if (prefab)
+        return prefab;
+    switch (id)
+    {
+        case RENDER_PREFAB_TREE:
+            prefab = RenderPrefab_getFirstById(id << 8 | variant);
+            return prefab ? prefab : GameAssets_createTreePrefab(id << 8 | variant);
+            
+    }
+    return prefab;
 }

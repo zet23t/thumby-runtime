@@ -7,5 +7,6 @@
 //                                  https://www.buydisplay.com/8051/ER-TFT0.85-1_8051_Tutorial.zip
 void engine_display_gc9107_init();
 void engine_display_gc9107_update(uint16_t *screen_buffer_to_render);
+void engine_display_gc9107_transmit();
 
 #endif  // ENGINE_DISPLAY_DRIVER_RP2_GC9107_H
