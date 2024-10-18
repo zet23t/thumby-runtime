@@ -160,58 +160,6 @@ void engine_display_gc9107_init(){
     gc9107_write_cmd(0x29, NULL, 0);
     sleep_ms(10);
 
-    // // OLD demo code from wider connector screen version
-    // https://www.buydisplay.com/0-85-inch-128x128-ips-tft-lcd-display-4-wire-spi-gc9107-controller
-    // https://www.buydisplay.com/8051/ER-TFT0.85-1_8051_Tutorial.zip
-    // gpio_put(PIN_GP17_SPI0_CSn__TO__CS, 1);
-    // sleep_ms(5);
-    // gpio_put(PIN_GP4__TO__RST, 0);
-    // sleep_ms(50);
-    // gpio_put(PIN_GP4__TO__RST, 1);
-    // sleep_ms(120);
-
-    // gc9107_write_cmd(0xB0, (uint8_t[]){ 0xC0 }, 1);
-    // gc9107_write_cmd(0xB2, (uint8_t[]){ 0x2F }, 1);
-    // gc9107_write_cmd(0xB3, (uint8_t[]){ 0x03 }, 1);
-    // gc9107_write_cmd(0xB6, (uint8_t[]){ 0x19 }, 1);
-    // gc9107_write_cmd(0xB7, (uint8_t[]){ 0x01 }, 1);
-
-    // gc9107_write_cmd(0xAC, (uint8_t[]){ 0xCB }, 1);
-    // gc9107_write_cmd(0xAB, (uint8_t[]){ 0x0e }, 1);
-
-    // gc9107_write_cmd(0xB4, (uint8_t[]){ 0x04 }, 1);
-
-    // gc9107_write_cmd(0xA8, (uint8_t[]){ 0x19 }, 1);
-
-    // gc9107_write_cmd(0x3A, (uint8_t[]){ 0x05 }, 1);
-
-    // gc9107_write_cmd(0xb8, (uint8_t[]){ 0x08 }, 1);
-
-    // gc9107_write_cmd(0xE8, (uint8_t[]){ 0x24 }, 1);
-
-    // gc9107_write_cmd(0xE9, (uint8_t[]){ 0x48 }, 1);
-
-    // gc9107_write_cmd(0xea, (uint8_t[]){ 0x22 }, 1);
-
-    // gc9107_write_cmd(0xC6, (uint8_t[]){ 0x30 }, 1);
-    // gc9107_write_cmd(0xC7, (uint8_t[]){ 0x18 }, 1);
-
-    // // Gamma, leave not set, use defaults
-    // // gc9107_write_cmd(0xF0, (uint8_t[]){ 0x1F, 0x28, 0x04, 0x3E, 0x2A, 0x2E, 0x20, 0x00, 0x0C, 0x06, 0x00, 0x1C, 0x1F, 0x0f }, 14);
-
-    // // gc9107_write_cmd(0xF1, (uint8_t[]){ 0x00, 0x2D, 0x2F, 0x3C, 0x6F, 0x1C, 0x0B, 0x00, 0x00, 0x00, 0x07, 0x0D, 0x11, 0x0f }, 14);
-
-    // gc9107_write_cmd(0x21, NULL, 0);
-
-
-    // gc9107_write_cmd(0x11, NULL, 0);
-    // sleep_ms(120);
-    // gc9107_write_cmd(0x29, NULL, 0);
-    // sleep_ms(10);
-    // // OLD demo code from wider connector screen version
-
-    // Grab unused dma channel for SPI TX
-    // ENGINE_INFO_PRINTF("Enabling DMA for 16-bit transfers");
     dma_tx = dma_claim_unused_channel(true);
 
     // Configure the DMA channel (for SPI TX)

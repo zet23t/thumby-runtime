@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "game/TE_Image.h"
 #include "hardware/gpio.h"
+#include "engine_audio.h"
 
 // Pico W devices use a GPIO on the WIFI chip for the LED,
 // so when building for Pico W, CYW43_WL_GPIO_LED_PIN will be defined
@@ -26,10 +27,15 @@
 #define GPIO_LED_G 10
 #define GPIO_LED_B 12
 
+
+void Audio_init();
+
 // Perform initialisation
 int pico_led_init(void)
 {
     RuntimeContext_init();
+    Audio_init();
+    
     return PICO_OK;
 }
 
@@ -53,6 +59,8 @@ void pico_set_led(bool led_on, bool g, bool b)
 
 void init(RuntimeContext *ctx);
 void update(RuntimeContext *ctx);
+void audioUpdate(AudioContext *audioContext);
+AudioContext* AudioContext_get();
 
 void setRGB(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -94,7 +102,8 @@ void OnPrint(const char *tx)
     setRGB(count & 1, count & 2, count & 4);
     // printf("%s\n", tx);
 }
-
+extern uint32_t audioWaveUpdateCounter;
+extern float audioWaveOut;
 int main()
 {
     stdio_init_all();
@@ -116,11 +125,11 @@ int main()
     TE_Img_fillRect(&img, 0, 32, 128, 64, 0xff88ff00, (TE_ImgOpState) {0});
     RuntimeContext_update();
 
-    setRGB(0, 1, 1);
+    // setRGB(0, 1, 1);
     init(ctx);
     while (true)
     {
-        setRGB(0, 0, 0);
+        // setRGB(0, 0, 0);
         uint32_t currentTime = time_us_32();
         // cap to 60fps
         while (currentTime - prevTime < 16666)
@@ -130,8 +139,19 @@ int main()
         }
         prevTime = currentTime;
 
-        setRGB(1, 0, 0);
+        // setRGB(1, 0, 0);
+        uint16_t *currentBuffer = soundBuffer.currentAudioBank ? soundBuffer.samplesB : soundBuffer.samplesA;
+        uint16_t bufferPos = audioWaveUpdateCounter % ENGINE_AUDIO_BUFFER_SIZE;
+        TE_Img_fillRect(&img, 0, 0, 128, 64, 0xff000000, (TE_ImgOpState) {});
+        for (int i=0;i<128;i++)
+        {
+            int16_t bufferIndex = i * 8;
+            uint16_t sample = currentBuffer[bufferIndex] >> 11;
+            TE_Img_VLine(&img, i, 32 - sample / 2, sample, 0xffffffff, (TE_ImgOpState) {});
+        }
+        TE_Img_VLine(&img, bufferPos / 4, 0, 64, 0xff0000ff, (TE_ImgOpState) {});
         ctx = RuntimeContext_update();
+
         ctx->getUTime = time_us_32;
 
         if (stdio_usb_connected())
@@ -220,8 +240,32 @@ int main()
             ctx->rgbLightGreen |= ctx->rgbLightRed = 1;
         }
 
-        setRGB(0, 1, 0);
+        if (!soundBuffer.bufferReady)
+        {
+            AudioContext *audioContext = AudioContext_get();
+            uint16_t *buffer = soundBuffer.currentAudioBank ? soundBuffer.samplesA : soundBuffer.samplesB;
+            audioContext->frames = ENGINE_AUDIO_BUFFER_SIZE;
+            audioContext->outBuffer = (char*) buffer;
+            audioContext->sampleRate = 22050;
+            audioContext->sampleSize = 16;
+                
+            for (int i=0;i<5;i++)
+            {
+                audioContext->inSfxInstructions[i] = ctx->outSfxInstructions[i];
+                ctx->outSfxInstructions[i] = (SFXInstruction){0};
+            }
+            memset(buffer, 0, ENGINE_AUDIO_BUFFER_SIZE * 2);
+            audioUpdate(audioContext);
+            for (int i=0;i<5;i++)
+            {
+                ctx->sfxChannelStatus[i] = audioContext->outSfxChannelStatus[i];
+                audioContext->inSfxInstructions[i] = (SFXInstruction){0};
+            }
+            soundBuffer.bufferReady = 1;
+        }
+
+        // setRGB(0, 1, 0);
         update(ctx);
-        setRGB(0, 0, 1);
+        // setRGB(0, 0, 1);
     }
 }

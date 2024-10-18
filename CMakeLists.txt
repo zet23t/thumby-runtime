@@ -36,6 +36,8 @@ endif()
 include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_pwm/include)
 include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_spi/include)
 include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_dma/include)
+include_directories(${PICO_SDK_PATH}/src/rp2_common/hardware_adc/include)
+include_directories(${PICO_SDK_PATH}/src/rp2_common/pico_multicore/include)
 include_directories(${CMAKE_SOURCE_DIR}/_src_gen) 
 
 project(blink C CXX ASM)
@@ -47,6 +49,7 @@ pico_sdk_init()
 
 file(GLOB GAME_CODE_SOURCES "game/*.c")
 file(GLOB GAME_ASSET_SOURCES "_src_gen/*.c")
+
 
 add_executable(blink
     blink.c

@@ -30,7 +30,8 @@
 #define GPIO_LED_G                  10
 #define GPIO_LED_B                  12
 
-RuntimeContext runtimeContext;
+static AudioContext audioContext;
+static RuntimeContext runtimeContext;
 
 void RuntimeContext_init(){
     //ENGINE_PRINTF("EngineInput: Setting up...\n");
@@ -120,6 +121,10 @@ static void Runtime_upload_rgba8_rgb16()
         buffer[i] = (b5 << 11) | (g6 << 5) | r5;
     }
     engine_display_gc9107_update(buffer);
+}
+
+AudioContext* AudioContext_get(){
+    return &audioContext;
 }
 
 RuntimeContext* RuntimeContext_update(){

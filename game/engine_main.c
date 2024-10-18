@@ -60,7 +60,7 @@ void TE_DebugRGB(uint8_t r, uint8_t g, uint8_t b)
 {
     if (ctxSetRGB)
     {
-        ctxSetRGB(r, g, b);
+        // ctxSetRGB(r, g, b);
     }
 }
 
