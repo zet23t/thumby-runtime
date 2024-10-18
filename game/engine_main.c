@@ -4,10 +4,14 @@
 #include <time.h>
 #include <string.h>
 
-#ifdef _WIN32
-#define DLL_EXPORT __declspec(dllexport)
+#ifdef __EMSCRIPTEN__
+#define DLL_EXPORT __attribute__((visibility("default")))
 #else
-#define DLL_EXPORT
+    #ifdef _WIN32
+    #define DLL_EXPORT __declspec(dllexport)
+    #else
+    #define DLL_EXPORT
+    #endif
 #endif
 
 #include <atlas.h>
@@ -120,6 +124,94 @@ float Avg32F_get(Avg32F *avg)
     return sum / 32.0f;
 }
 
+static TE_Img img;
+
+void TE_Debug_drawPixel(int x, int y, uint32_t color)
+{
+    TE_Img_setPixel(&img, x, y, color, (TE_ImgOpState) {
+        .zCompareMode = Z_COMPARE_ALWAYS,
+        .zValue = 255,
+    });
+}
+
+void TE_Debug_drawLine(int x1, int y1, int x2, int y2, uint32_t color)
+{
+    TE_Img_line(&img, x1, y1, x2, y2, color, (TE_ImgOpState) {
+        .zCompareMode = Z_COMPARE_ALWAYS,
+        .zValue = 255,
+    });
+}
+
+void TE_Debug_drawLineCircle(int x, int y, int r, uint32_t color)
+{
+    TE_Img_lineCircle(&img, x, y, r, color, (TE_ImgOpState) {
+        .zCompareMode = Z_COMPARE_ALWAYS,
+        .zValue = 255,
+    });
+}
+
+
+TE_Img tinyImg;
+TE_Font tinyfont;
+
+void TE_Debug_drawText(int x, int y, const char *text, uint32_t color)
+{
+    TE_Font_drawText(&img, &tinyfont, x, y, -1, text, color, (TE_ImgOpState) {
+        .zCompareMode = Z_COMPARE_ALWAYS,
+        .zValue = 255,
+    });
+}
+uint8_t activeSceneId;
+
+//# WebAssembly function helpers
+// functions for web assembly export to ease JS bridging
+#include <stdlib.h>
+DLL_EXPORT RuntimeContext* RuntimeContext_create()
+{
+    RuntimeContext *ctx = (RuntimeContext*)malloc(sizeof(RuntimeContext));
+    memset(ctx, 0, sizeof(RuntimeContext));
+    return ctx;
+}
+
+DLL_EXPORT uint32_t* RuntimeContext_getScreen(RuntimeContext *ctx) { return ctx->screenData; }
+DLL_EXPORT uint32_t RuntimeContext_getRGBLed(RuntimeContext *ctx) { return ctx->rgbLightRed | (ctx->rgbLightGreen << 8) | (ctx->rgbLightBlue << 16); }
+DLL_EXPORT float RuntimeContext_getRumble(RuntimeContext *ctx) { return ctx->rumbleIntensity; }
+DLL_EXPORT void RuntimeContext_setUTimeCallback(RuntimeContext *ctx, uint32_t (*getUTime)())
+{
+    ctx->getUTime = getUTime;
+}
+DLL_EXPORT void RuntimeContext_updateInputs(RuntimeContext *ctx, 
+    double time, double timeDelta,
+    uint8_t up, uint8_t right, uint8_t down, uint8_t left, uint8_t a, uint8_t b, uint8_t menu, uint8_t shoulderLeft, uint8_t shoulderRight)
+{
+    ctx->time = (float)time;
+    ctx->deltaTime = (float)timeDelta;
+    ctx->frameCount++;
+
+    ctx->prevInputUp = ctx->inputUp;
+    ctx->prevInputRight = ctx->inputRight;
+    ctx->prevInputDown = ctx->inputDown;
+    ctx->prevInputLeft = ctx->inputLeft;
+    ctx->prevInputA = ctx->inputA;
+    ctx->prevInputB = ctx->inputB;
+    ctx->prevInputMenu = ctx->inputMenu;
+    ctx->prevInputShoulderLeft = ctx->inputShoulderLeft;
+    ctx->prevInputShoulderRight = ctx->inputShoulderRight;
+
+    ctx->inputUp = up;
+    ctx->inputRight = right;
+    ctx->inputDown = down;
+    ctx->inputLeft = left;
+    ctx->inputA = a;
+    ctx->inputB = b;
+    ctx->inputMenu = menu;
+    ctx->inputShoulderLeft = shoulderLeft;
+    ctx->inputShoulderRight = shoulderRight;
+}
+
+//# Runtime function hooks
+
+//## init
 DLL_EXPORT void init(RuntimeContext *ctx)
 {
     ctxLog = ctx->log;
@@ -238,60 +330,30 @@ DLL_EXPORT void init(RuntimeContext *ctx)
     TE_DebugRGB(1, 1, 1);
     Scene_setStep(state->currentStep);
     TE_DebugRGB(1, 0, 1);
-    // Environment_addTree(30,50, 12343050);
-    // // Environment_addTree(35,50, 12343550);
-    // // Environment_addTree(25,30, 12342530);
-    // Environment_addTree(60,50, 12346050);
-    // Environment_addTree(90,50, 12349050);
-    // Environment_addTree(35,90, 12343590);
-    // Environment_addTree(65,110, 12346511);
-    // Environment_addTree(90,80, 12349080);
-    // Environment_addTree(95,80, 12349580);
-    // Environment_addTree(95,90, 12349590);
-    // // Environment_addTree(30,80, 12343080);
-    // // Environment_addTree(60,80, 12346080);
-    // // Environment_addTree(90,80, 12349080);
 }
 
-static TE_Img img;
-
-void TE_Debug_drawPixel(int x, int y, uint32_t color)
+//## audioUpdate
+#include "game_audio.h"
+DLL_EXPORT void audioUpdate(AudioContext *audioContext)
 {
-    TE_Img_setPixel(&img, x, y, color, (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
+    GameAudio_update(audioContext);
+
+    // audioFrequency = frequency + (audioFrequency - frequency)*0.95f;
+
+    // float incr = audioFrequency/(float)sampleRate;
+    // short *d = (short *)buffer;
+    // float amplitude = 0.1f;
+
+    // for (unsigned int i = 0; i < frames; i++)
+    // {
+    //     d[i] = (short)(32000.0f*sinf(2*M_PI*sineIdx) * amplitude);
+    //     sineIdx += incr;
+    //     if (sineIdx > 1.0f) sineIdx -= 1.0f;
+    // }
 }
 
-void TE_Debug_drawLine(int x1, int y1, int x2, int y2, uint32_t color)
-{
-    TE_Img_line(&img, x1, y1, x2, y2, color, (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
-}
-
-void TE_Debug_drawLineCircle(int x, int y, int r, uint32_t color)
-{
-    TE_Img_lineCircle(&img, x, y, r, color, (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
-}
-
-
-TE_Img tinyImg;
-TE_Font tinyfont;
-
-void TE_Debug_drawText(int x, int y, const char *text, uint32_t color)
-{
-    TE_Font_drawText(&img, &tinyfont, x, y, -1, text, color, (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
-}
-uint8_t activeSceneId;
-
+//## update
+// The main update function for the game engine
 DLL_EXPORT void update(RuntimeContext *ctx)
 {
     TE_FrameStats imgStats = TE_Img_resetStats();
@@ -345,9 +407,7 @@ DLL_EXPORT void update(RuntimeContext *ctx)
             .tintColor = 0xff306f8a,
         });
     }
-    
     uint32_t start = ctx->getUTime();
-
     BENCH(Scene_update(ctx, &img), scene)
     BENCH(Projectiles_update(projectiles, ctx, &img), projectiles)
     BENCH(RenderObject_update(ctx, &img), renderObjects)
@@ -397,71 +457,75 @@ DLL_EXPORT void update(RuntimeContext *ctx)
     //     .zValue = 100,
     // });
 
-    uint16_t fps = (uint16_t)roundl(1.0f / ctx->deltaTime);
-    static uint16_t recentFPS[32];
-    static uint8_t recentFPSIndex = 0;
-    recentFPS[recentFPSIndex] = fps;
-    recentFPSIndex = (recentFPSIndex + 1) % 32;
+    if (ctx->drawStats)
+    {
 
-    uint16_t avgFPS = 0;
-    for (int i=0;i<32;i++)
-    {
-        avgFPS += recentFPS[i];
-    }
-    avgFPS /= 32;
-    // if (fps > 25)
-    // {
-    //     return;
-    // }
-    char text[64];
-    const char *benchNames[] = {
-        "scene",
-        "projectiles",
-        "environment",
-        "particles",
-        "enemies",
-        "player",
-        "script",
-        "menu",
-        "renderO",
-        "total",
-    };
-    static uint8_t displayBenchIndex = 9;
-    static Avg32F avgDuration;
-    int dir = 0;
-    if (ctx->inputB && !ctx->prevInputRight && ctx->inputRight)
-    {
-        dir = 1;
-    }
-    if (ctx->inputB && !ctx->prevInputLeft && ctx->inputLeft)
-    {
-        dir = -1;
-    }
+        uint16_t fps = (uint16_t)roundl(1.0f / ctx->deltaTime);
+        static uint16_t recentFPS[32];
+        static uint8_t recentFPSIndex = 0;
+        recentFPS[recentFPSIndex] = fps;
+        recentFPSIndex = (recentFPSIndex + 1) % 32;
 
-    if (dir)
-    {
-        displayBenchIndex = (displayBenchIndex + 11 + dir) % 11;
-        if (displayBenchIndex < 10)
-            Avg32F_fill(&avgDuration, ctx->frameStats.updateTimes[displayBenchIndex] / 1000.0f);
-    }
+        uint16_t avgFPS = 0;
+        for (int i=0;i<32;i++)
+        {
+            avgFPS += recentFPS[i];
+        }
+        avgFPS /= 32;
+        // if (fps > 25)
+        // {
+        //     return;
+        // }
+        char text[64];
+        const char *benchNames[] = {
+            "scene",
+            "projectiles",
+            "environment",
+            "particles",
+            "enemies",
+            "player",
+            "script",
+            "menu",
+            "renderO",
+            "total",
+        };
+        static uint8_t displayBenchIndex = 9;
+        static Avg32F avgDuration;
+        int dir = 0;
+        if (ctx->inputB && !ctx->prevInputRight && ctx->inputRight)
+        {
+            dir = 1;
+        }
+        if (ctx->inputB && !ctx->prevInputLeft && ctx->inputLeft)
+        {
+            dir = -1;
+        }
 
-    if (displayBenchIndex == 10)
-    {
-        sprintf(text, "FPS: %d|%d|%dk|%d", avgFPS, imgStats.blitCount, imgStats.blitPixelCount>>10, imgStats.blitXCount);
-    }
-    else
-    {
-        float durationMS = ctx->frameStats.updateTimes[displayBenchIndex] / 1000.0f;
-        Avg32F_push(&avgDuration, durationMS);
-        float durationAvg = Avg32F_get(&avgDuration);
-        sprintf(text, "FPS: %d; %s %.2f", avgFPS, benchNames[displayBenchIndex], durationAvg);
-    }
+        if (dir)
+        {
+            displayBenchIndex = (displayBenchIndex + 11 + dir) % 11;
+            if (displayBenchIndex < 10)
+                Avg32F_fill(&avgDuration, ctx->frameStats.updateTimes[displayBenchIndex] / 1000.0f);
+        }
 
-    TE_Font medFont = GameAssets_getFont(FONT_MEDIUM);
-    TE_Font_drawText(&img, &medFont, 1, 115, -1, text, 0xffffffff, (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
+        if (displayBenchIndex == 10)
+        {
+            sprintf(text, "FPS: %d|%d|%dk|%d", avgFPS, imgStats.blitCount, imgStats.blitPixelCount>>10, imgStats.blitXCount);
+        }
+        else
+        {
+            float durationMS = ctx->frameStats.updateTimes[displayBenchIndex] / 1000.0f;
+            Avg32F_push(&avgDuration, durationMS);
+            float durationAvg = Avg32F_get(&avgDuration);
+            sprintf(text, "FPS: %d; %s %.2f", avgFPS, benchNames[displayBenchIndex], durationAvg);
+        }
+
+        TE_Font medFont = GameAssets_getFont(FONT_MEDIUM);
+        TE_Font_drawText(&img, &medFont, 1, 115, -1, text, 0xffffffff, (TE_ImgOpState) {
+            .zCompareMode = Z_COMPARE_ALWAYS,
+            .zValue = 255,
+        });
+    }
 
     GameRuntimeContextState *state = (GameRuntimeContextState*)ctx->projectData;
     state->isInitiailized = 1;

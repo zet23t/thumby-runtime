@@ -45,34 +45,14 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
+file(GLOB GAME_CODE_SOURCES "game/*.c")
+file(GLOB GAME_ASSET_SOURCES "_src_gen/*.c")
+
 add_executable(blink
     blink.c
-    _src_gen/atlas.c
-    _src_gen/fnt_medium.c
-    _src_gen/fnt_myfont.c
-    _src_gen/fnt_tiny.c
-    _src_gen/fnt_mymono.c
-    game/game_assets.c
-    game/game.c
-    game/engine_main.c
-    game/game_character.c
-    game/game_enemies.c
-    game/game_environment.c
-    game/game_menu.c
-    game/game_particlesystem.c
-    game/game_player.c
-    game/game_projectile.c
-    game/game_scene_0_testing.c
-    game/game_scene_3.c
-    game/game_scenes.c
-    game/game_renderobjects.c
-    game/game_battle_actions.c
-    game/game_battle.c
-    game/TE_Image.c
-    game/TE_Font.c
-    game/TE_math.c
-    game/TE_rand.c
-    game/TE_sdfmap.c
+    engine_audio.c
+    ${GAME_CODE_SOURCES}
+    ${GAME_ASSET_SOURCES}
     )
 
 # pull in common dependencies

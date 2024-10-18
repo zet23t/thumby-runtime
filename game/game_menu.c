@@ -19,6 +19,11 @@ typedef struct GameMenu
 
 static GameMenu gameMenu;
 
+uint8_t Menu_isActive()
+{
+    return gameMenu.isActive;
+}
+
 void Menu_update(RuntimeContext *ctx, TE_Img* img)
 {
     if (ctx->inputMenu)
@@ -135,8 +140,40 @@ void Menu_update(RuntimeContext *ctx, TE_Img* img)
         .scissorHeight = clipHeight,
     });
 
+    if (ctx->inputA && !ctx->prevInputA)
+    {
+        ctx->drawStats = !ctx->drawStats;
+    }
+
+    if (ctx->inputB && !ctx->prevInputB)
+    {
+        if (ctx->sfxChannelStatus[0].flagIsPlaying)
+        {
+            LOG("Menu: Pausing music");
+            ctx->outSfxInstructions[0] = (SFXInstruction)
+            {
+                .type = SFXINSTRUCTION_TYPE_PAUSE
+            };
+        }
+        else
+        {
+            LOG("Menu: Playing music");
+            static int musicId = 0;
+            ctx->outSfxInstructions[0] = (SFXInstruction)
+            {
+                .type = SFXINSTRUCTION_TYPE_PLAY,
+                .id = musicId++%5,
+                .updateMask = SFXINSTRUCTION_UPDATE_MASK_VOLUME,
+                .volume = 150
+            };
+        }
+    }
+
     char info[128];
-    sprintf(info, "RenderObjectSprite: %d RuntimeContext: %d", (int) sizeof(RenderObjectSprite), (int) sizeof(RuntimeContext));
+    sprintf(info, "Draw stats (A): %s - Play Music (B) - Music by ModArchive.org: "
+        "4mat-Wizardry; 2_core; 1987-tune; greensleeves_thx; nitabrowski", 
+        ctx->drawStats ? "yes" : "no");
+    
 
     TE_Font_drawTextBox(img, &tinyfont, menuX + 4, menuY + 18, 127-(menuX + 4)*2 - 2, 64, -1, -4, 
         info, alignX, alignY, 0xffffffff, (TE_ImgOpState)

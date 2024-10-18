@@ -12,8 +12,6 @@
 
 int8_t _loadNextScene = -1;
 
-void DrawSpeechBubble(TE_Img *screenData, int16_t x, int16_t y, int16_t width, int16_t height, int16_t arrowX, int16_t arrowY, const char *text);
-
 void DrawNextButtonAction(RuntimeContext *ctx, TE_Img *screenData)
 {
     int16_t pressY = (int16_t)(fmodf(ctx->time, 0.6f) * 2.0f) + 117;
@@ -60,7 +58,7 @@ uint8_t Condition_update(const Condition *condition, RuntimeContext *ctx, TE_Img
         for (int i=0;i<4;i++)
         {
             float x, y;
-            if (Enemies_getPosition(condition->npcsInRect.npcIds[i], &x, &y))
+            if (Enemies_getPosition(condition->npcsInRect.npcIds[i], &x, &y, 0))
             {
                 if (x < condition->npcsInRect.x || x > condition->npcsInRect.x + condition->npcsInRect.width
                     || y < condition->npcsInRect.y || y > condition->npcsInRect.y + condition->npcsInRect.height)
@@ -77,10 +75,20 @@ uint8_t Condition_update(const Condition *condition, RuntimeContext *ctx, TE_Img
         return time >= condition->wait.duration;
     }
 
+    if (condition->type == CONDITION_TYPE_CALLBACK)
+    {
+        return condition->callback.callbackEx(ctx, screenData, condition);
+    }
+
+    if (condition->type == CONDITION_TYPE_CALLBACK_DATA)
+    {
+        return condition->callback.callbackRawData(condition->callback.callbackData);
+    }
+
     if (condition->type == CONDITION_TYPE_PRESS_NEXT)
     {
         DrawNextButtonAction(ctx, screenData);
-        return ctx->inputRight && !ctx->prevInputRight;
+        return ctx->inputRight && !ctx->prevInputRight && !Menu_isActive();
     }
 
     return 0;
@@ -107,6 +115,19 @@ struct ScriptedActions scriptedActions;
 #define SCRIPTED_ACTION_TYPE_SET_PLAYER_POSITION 15
 #define SCRIPTED_ACTION_TYPE_SET_ENEMY_CALLBACK 16
 #define SCRIPTED_ACTION_TYPE_CUSTOM_CALLBACK 17
+#define SCRIPTED_ACTION_TYPE_THOUGHT_BUBBLE 18
+
+static ScriptedAction* ScriptedAction_getFreeAction()
+{
+    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    {
+        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
+        {
+            return &scriptedActions.actions[i];
+        }
+    }
+    return NULL;
+}
 
 void ScriptedAction_init()
 {
@@ -121,141 +142,147 @@ void ScriptedAction_init()
     scriptedActions.plotIndexStartTime = 0.0f;
 }
 
+ScriptedAction* ScriptedAction_addThoughtBubble(uint8_t stepStart, uint8_t stepStop, const char *text, uint8_t speaker, int16_t thoughtBubbleX, int16_t thoughtBubbleY, uint8_t thoughtBubbleWidth, uint8_t thoughtBubbleHeight, int8_t arrowXOffset, int8_t arrowYOffset)
+{
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
+    {
+        action->actionType = SCRIPTED_ACTION_TYPE_THOUGHT_BUBBLE;
+        action->speechBubble.text = text;
+        action->speechBubble.speaker = speaker;
+        action->speechBubble.speechBubbleX = thoughtBubbleX;
+        action->speechBubble.speechBubbleY = thoughtBubbleY;
+        action->speechBubble.speechBubbleWidth = thoughtBubbleWidth;
+        action->speechBubble.speechBubbleHeight = thoughtBubbleHeight;
+        action->speechBubble.arrowXOffset = arrowXOffset;
+        action->speechBubble.arrowYOffset = arrowYOffset;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return action;
+    }
+    return NULL;
+}
+
 ScriptedAction* ScriptedAction_addSpeechBubble(uint8_t stepStart, uint8_t stepStop, const char *text, uint8_t speaker, int16_t speechBubbleX, int16_t speechBubbleY, uint8_t speechBubbleWidth, uint8_t speechBubbleHeight, int8_t arrowXOffset, int8_t arrowYOffset)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SPEECH_BUBBLE;
-            scriptedActions.actions[i].speechBubble.text = text;
-            scriptedActions.actions[i].speechBubble.speaker = speaker;
-            scriptedActions.actions[i].speechBubble.speechBubbleX = speechBubbleX;
-            scriptedActions.actions[i].speechBubble.speechBubbleY = speechBubbleY;
-            scriptedActions.actions[i].speechBubble.speechBubbleWidth = speechBubbleWidth;
-            scriptedActions.actions[i].speechBubble.speechBubbleHeight = speechBubbleHeight;
-            scriptedActions.actions[i].speechBubble.arrowXOffset = arrowXOffset;
-            scriptedActions.actions[i].speechBubble.arrowYOffset = arrowYOffset;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return &scriptedActions.actions[i];
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SPEECH_BUBBLE;
+        action->speechBubble.text = text;
+        action->speechBubble.speaker = speaker;
+        action->speechBubble.speechBubbleX = speechBubbleX;
+        action->speechBubble.speechBubbleY = speechBubbleY;
+        action->speechBubble.speechBubbleWidth = speechBubbleWidth;
+        action->speechBubble.speechBubbleHeight = speechBubbleHeight;
+        action->speechBubble.arrowXOffset = arrowXOffset;
+        action->speechBubble.arrowYOffset = arrowYOffset;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return action;
     }
+
 
     return NULL;
 }
 
 void ScriptedAction_addPlayerControlsEnabled(uint8_t stepStart, uint8_t stepStop, uint8_t enabled)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_PLAYER_CONTROLS_ENABLED;
-            scriptedActions.actions[i].playerControlsData.enabled = enabled;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_PLAYER_CONTROLS_ENABLED;
+        action->playerControlsData.enabled = enabled;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 void ScriptedAction_addSetPlayerTarget(uint8_t stepStart, uint8_t stepStop, int16_t x, int16_t y, uint8_t setX, uint8_t setY)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_PLAYER_TARGET;
-            scriptedActions.actions[i].playerTarget.targetX = x;
-            scriptedActions.actions[i].playerTarget.targetY = y;
-            scriptedActions.actions[i].playerTarget.setX = setX;
-            scriptedActions.actions[i].playerTarget.setY = setY;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_PLAYER_TARGET;
+        action->playerTarget.targetX = x;
+        action->playerTarget.targetY = y;
+        action->playerTarget.setX = setX;
+        action->playerTarget.setY = setY;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 void ScriptedAction_addSetPlayerPosition(uint8_t stepStart, uint8_t stepStop, int16_t x, int16_t y, uint8_t setX, uint8_t setY)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_PLAYER_POSITION;
-            scriptedActions.actions[i].playerTarget.targetX = x;
-            scriptedActions.actions[i].playerTarget.targetY = y;
-            scriptedActions.actions[i].playerTarget.setX = setX;
-            scriptedActions.actions[i].playerTarget.setY = setY;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_PLAYER_POSITION;
+        action->playerTarget.targetX = x;
+        action->playerTarget.targetY = y;
+        action->playerTarget.setX = setX;
+        action->playerTarget.setY = setY;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 void ScriptedAction_addSetNPCTarget(uint8_t stepStart, uint8_t stepStop, uint8_t id, int16_t x, int16_t y)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_NPC_TARGET;
-            scriptedActions.actions[i].npcTarget.id = id;
-            scriptedActions.actions[i].npcTarget.x = x;
-            scriptedActions.actions[i].npcTarget.y = y;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_NPC_TARGET;
+        action->npcTarget.id = id;
+        action->npcTarget.x = x;
+        action->npcTarget.y = y;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 void ScriptedAction_addProceedPlotCondition(uint8_t stepStart, uint8_t stepStop, uint8_t setPlotIndex, Condition condition)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_PROCEED_PLOT_CONDITION;
-            scriptedActions.actions[i].proceedPlotCondition.setPlotIndex = setPlotIndex;
-            scriptedActions.actions[i].proceedPlotCondition.condition = condition;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_PROCEED_PLOT_CONDITION;
+        action->proceedPlotCondition.setPlotIndex = setPlotIndex;
+        action->proceedPlotCondition.condition = condition;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 void ScriptedAction_addSetFlags(uint8_t stepStart, uint8_t stepStop, uint32_t setFlags, uint32_t mask)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_FLAGS;
-            scriptedActions.actions[i].setFlags.setFlags = setFlags;
-            scriptedActions.actions[i].setFlags.mask = mask;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_FLAGS;
+        action->setFlags.setFlags = setFlags;
+        action->setFlags.mask = mask;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 void ScriptedAction_addSetNPCHealth(uint8_t stepStart, uint8_t stepStop, uint8_t id, float health)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_NPC_HEALTH;
-            scriptedActions.actions[i].npcHealth.id = id;
-            scriptedActions.actions[i].npcHealth.health = health;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_NPC_HEALTH;
+        action->npcHealth.id = id;
+        action->npcHealth.health = health;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
@@ -272,70 +299,64 @@ void ScriptedAction_addJumpStep(uint8_t stepStart, uint8_t stepStop, uint8_t ste
 
 void ScriptedAction_addSetEnemyCallback(uint8_t stepStart, uint8_t stepStop, uint8_t id, EnemyCallbackUserData callback)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_ENEMY_CALLBACK;
-            scriptedActions.actions[i].setEnemyCallback.id = id;
-            scriptedActions.actions[i].setEnemyCallback.callback = callback;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_ENEMY_CALLBACK;
+        action->setEnemyCallback.id = id;
+        action->setEnemyCallback.callback = callback;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 void ScriptedAction_addSetItem(uint8_t stepStart, uint8_t stepStop, uint8_t charId, int8_t leftItemIndex, int8_t rightItemIndex)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SET_ITEM;
-            scriptedActions.actions[i].setItem.charId = charId;
-            scriptedActions.actions[i].setItem.leftItemIndex = leftItemIndex;
-            scriptedActions.actions[i].setItem.rightItemIndex = rightItemIndex;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SET_ITEM;
+        action->setItem.charId = charId;
+        action->setItem.leftItemIndex = leftItemIndex;
+        action->setItem.rightItemIndex = rightItemIndex;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 
 void ScriptedAction_addSceneFadeOut(uint8_t stepStart, uint8_t stepStop, uint8_t type, uint8_t nextPlotIndex, float duration, float beginDelay, float finishDelay)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_SCENE_FADE_OUT;
-            scriptedActions.actions[i].sceneFadeOut.type = type;
-            scriptedActions.actions[i].sceneFadeOut.duration = duration;
-            scriptedActions.actions[i].sceneFadeOut.beginDelay = beginDelay;
-            scriptedActions.actions[i].sceneFadeOut.finishDelay = finishDelay;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
-            scriptedActions.actions[i].sceneFadeOut.nextPlotIndex = nextPlotIndex;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_SCENE_FADE_OUT;
+        action->sceneFadeOut.type = type;
+        action->sceneFadeOut.duration = duration;
+        action->sceneFadeOut.beginDelay = beginDelay;
+        action->sceneFadeOut.finishDelay = finishDelay;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        action->sceneFadeOut.nextPlotIndex = nextPlotIndex;
+        return;
     }
 }
 
 void ScriptedAction_addTitleScreen(uint8_t stepStart, uint8_t stepStop, const char *text, const char *subtitle, uint8_t fillBlackBackground, uint8_t nextPlotIndex)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
         {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_TITLE_SCREEN;
-            scriptedActions.actions[i].titleScreen.titleText = text;
-            scriptedActions.actions[i].titleScreen.subText = subtitle;
-            scriptedActions.actions[i].titleScreen.fillBlackBackground = fillBlackBackground;
-            scriptedActions.actions[i].titleScreen.nextPlotIndex = nextPlotIndex;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
+            action->actionType = SCRIPTED_ACTION_TYPE_TITLE_SCREEN;
+            action->titleScreen.titleText = text;
+            action->titleScreen.subText = subtitle;
+            action->titleScreen.fillBlackBackground = fillBlackBackground;
+            action->titleScreen.nextPlotIndex = nextPlotIndex;
+            action->startPlotIndex = stepStart;
+            action->endPlotIndex = stepStop;
             return;
         }
     }
@@ -343,14 +364,14 @@ void ScriptedAction_addTitleScreen(uint8_t stepStart, uint8_t stepStop, const ch
 
 void ScriptedAction_addLoadScene(uint8_t stepStart, uint8_t stepStop, uint8_t sceneId)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
         {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_LOAD_SCENE;
-            scriptedActions.actions[i].loadScene.sceneId = sceneId;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
+            action->actionType = SCRIPTED_ACTION_TYPE_LOAD_SCENE;
+            action->loadScene.sceneId = sceneId;
+            action->startPlotIndex = stepStart;
+            action->endPlotIndex = stepStop;
             return;
         }
     }
@@ -358,15 +379,15 @@ void ScriptedAction_addLoadScene(uint8_t stepStart, uint8_t stepStop, uint8_t sc
 
 void ScriptedAction_addClearScreen(uint8_t stepStart, uint8_t stepStop, uint32_t color, uint8_t z)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        if (scriptedActions.actions[i].actionType == SCRIPTED_ACTION_TYPE_NONE)
         {
-            scriptedActions.actions[i].actionType = SCRIPTED_ACTION_TYPE_CLEAR_SCREEN;
-            scriptedActions.actions[i].clearScreen.color = color;
-            scriptedActions.actions[i].clearScreen.z = z;
-            scriptedActions.actions[i].startPlotIndex = stepStart;
-            scriptedActions.actions[i].endPlotIndex = stepStop;
+            action->actionType = SCRIPTED_ACTION_TYPE_CLEAR_SCREEN;
+            action->clearScreen.color = color;
+            action->clearScreen.z = z;
+            action->startPlotIndex = stepStart;
+            action->endPlotIndex = stepStop;
             return;
         }
     }
@@ -375,38 +396,32 @@ void ScriptedAction_addClearScreen(uint8_t stepStart, uint8_t stepStop, uint32_t
 void ScriptedAction_addNPCSpawn(uint8_t stepStart, uint8_t stepStop, uint8_t npcId, uint8_t characterType, 
     int16_t x, int16_t y, int16_t targetX, int16_t targetY)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        ScriptedAction *action = &scriptedActions.actions[i];
-        if (action->actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            action->actionType = SCRIPTED_ACTION_TYPE_NPC_SPAWN;
-            action->npcSpawn.id = npcId;
-            action->npcSpawn.characterType = characterType;
-            action->npcSpawn.x = x;
-            action->npcSpawn.y = y;
-            action->npcSpawn.targetX = targetX;
-            action->npcSpawn.targetY = targetY;
-            action->startPlotIndex = stepStart;
-            action->endPlotIndex = stepStop;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_NPC_SPAWN;
+        action->npcSpawn.id = npcId;
+        action->npcSpawn.characterType = characterType;
+        action->npcSpawn.x = x;
+        action->npcSpawn.y = y;
+        action->npcSpawn.targetX = targetX;
+        action->npcSpawn.targetY = targetY;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return;
     }
 }
 
 ScriptedAction* ScriptedAction_addCustomCallback(uint8_t stepStart, uint8_t stepStop, void(*callback)(RuntimeContext *ctx, TE_Img *screenData, ScriptedAction *callbackData))
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        ScriptedAction *action = &scriptedActions.actions[i];
-        if (action->actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            action->actionType = SCRIPTED_ACTION_TYPE_CUSTOM_CALLBACK;
-            action->customCallback.callback = callback;
-            action->startPlotIndex = stepStart;
-            action->endPlotIndex = stepStop;
-            return action;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_CUSTOM_CALLBACK;
+        action->customCallback.callback = callback;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        return action;
     }
     return NULL;
 }
@@ -414,24 +429,21 @@ ScriptedAction* ScriptedAction_addCustomCallback(uint8_t stepStart, uint8_t step
 void ScriptedAction_addAnimationPlayback(uint8_t stepStart, uint8_t stepStop, uint8_t animationId, int16_t x, int16_t y, uint8_t z,
     float delay, float speed, uint8_t loop, uint32_t tintColor)
 {
-    for (int i=0;i<MAX_SCRIPTED_ACTIONS;i++)
+    ScriptedAction *action = ScriptedAction_getFreeAction();
+    if (action)
     {
-        ScriptedAction *action = &scriptedActions.actions[i];
-        if (action->actionType == SCRIPTED_ACTION_TYPE_NONE)
-        {
-            action->actionType = SCRIPTED_ACTION_TYPE_ANIMATION_PLAYBACK;
-            action->animationPlayback.animationId = animationId;
-            action->animationPlayback.x = x;
-            action->animationPlayback.y = y;
-            action->animationPlayback.z = z;
-            action->animationPlayback.delay = delay;
-            action->animationPlayback.speed = speed;
-            action->animationPlayback.maxLoopCount = loop;
-            action->startPlotIndex = stepStart;
-            action->endPlotIndex = stepStop;
-            action->animationPlayback.tintColor = tintColor;
-            return;
-        }
+        action->actionType = SCRIPTED_ACTION_TYPE_ANIMATION_PLAYBACK;
+        action->animationPlayback.animationId = animationId;
+        action->animationPlayback.x = x;
+        action->animationPlayback.y = y;
+        action->animationPlayback.z = z;
+        action->animationPlayback.delay = delay;
+        action->animationPlayback.speed = speed;
+        action->animationPlayback.maxLoopCount = loop;
+        action->startPlotIndex = stepStart;
+        action->endPlotIndex = stepStop;
+        action->animationPlayback.tintColor = tintColor;
+        return;
     }
 }
 
@@ -469,19 +481,27 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData)
             action.actionStartTime = ctx->time;
         }
 
-        if (action.actionType == SCRIPTED_ACTION_TYPE_SPEECH_BUBBLE)
+        if (action.actionType == SCRIPTED_ACTION_TYPE_SPEECH_BUBBLE || action.actionType == SCRIPTED_ACTION_TYPE_THOUGHT_BUBBLE)
         {
             int16_t characterX = player.x;
             int16_t characterY = player.y;
             float chrX, chrY;
-            if (Enemies_getPosition(action.speechBubble.speaker, &chrX, &chrY))
+            if (Enemies_getPosition(action.speechBubble.speaker, &chrX, &chrY, 1))
             {
                 characterX = (int16_t)chrX;
                 characterY = (int16_t)chrY;
             }
 
-            DrawSpeechBubble(screenData, action.speechBubble.speechBubbleX, action.speechBubble.speechBubbleY, action.speechBubble.speechBubbleWidth, action.speechBubble.speechBubbleHeight, 
-                characterX + action.speechBubble.arrowXOffset, characterY + action.speechBubble.arrowYOffset, action.speechBubble.text);
+            if (action.actionType == SCRIPTED_ACTION_TYPE_SPEECH_BUBBLE)
+            {
+                DrawSpeechBubble(screenData, action.speechBubble.speechBubbleX, action.speechBubble.speechBubbleY, action.speechBubble.speechBubbleWidth, action.speechBubble.speechBubbleHeight, 
+                    characterX + action.speechBubble.arrowXOffset, characterY + action.speechBubble.arrowYOffset, action.speechBubble.text);
+            }
+            else
+            {
+                DrawThoughtBubble(screenData, ctx, action.speechBubble.speechBubbleX, action.speechBubble.speechBubbleY, action.speechBubble.speechBubbleWidth, action.speechBubble.speechBubbleHeight, 
+                    characterX + action.speechBubble.arrowXOffset, characterY + action.speechBubble.arrowYOffset, action.speechBubble.text);
+            }
             continue;
         }
 
@@ -519,6 +539,7 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData)
                 {
                     playerCharacter.x = action.playerTarget.targetX;
                 }
+                // LOG("%d: Setting player target X to %d", i, action.playerTarget.targetX);
             }
             if (action.playerTarget.setY)
             {
@@ -527,6 +548,7 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData)
                 {
                     playerCharacter.y = action.playerTarget.targetY;
                 }
+                // LOG("Setting player target Y to %d", action.playerTarget.targetY);
             }
             continue;
         }
@@ -545,7 +567,7 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData)
 
         if (action.actionType == SCRIPTED_ACTION_TYPE_SET_ENEMY_CALLBACK)
         {
-            Enemy* enemy = Enemies_getEnemy(action.setEnemyCallback.id);
+            Enemy* enemy = Enemies_getEnemy(action.setEnemyCallback.id, 0);
             if (enemy) {
                 LOG("Setting enemy[%d] (%p) callback", action.setEnemyCallback.id, enemy);
                 enemy->userCallbackData = action.setEnemyCallback.callback;
@@ -619,7 +641,7 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData)
             });
 
             DrawNextButtonAction(ctx, screenData);
-            if (ctx->inputRight && !ctx->prevInputRight)
+            if (ctx->inputRight && !ctx->prevInputRight && !Menu_isActive())
             {
                 nextPlotIndex = action.titleScreen.nextPlotIndex;
             }
@@ -696,7 +718,7 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData)
 
 static void (*_sceneUpdateFn)(RuntimeContext *ctx, TE_Img *screenData);
 
-static void DrawTextBlock(TE_Img *screenData, int16_t x, int16_t y, int16_t width, int16_t height, const char *text)
+void DrawTextBlock(TE_Img *screenData, int16_t x, int16_t y, int16_t width, int16_t height, const char *text)
 {
     TE_Font font = GameAssets_getFont(0);
     TE_Img_fillRect(screenData, x+1, y+1, width-2, height-2, DB32Colors[21], (TE_ImgOpState){
@@ -713,16 +735,93 @@ static void DrawTextBlock(TE_Img *screenData, int16_t x, int16_t y, int16_t widt
     });
 }
 
+void DrawTextBubble(TE_Img *screenData, uint8_t fillColorIndex, int16_t x, int16_t y, int16_t width, int16_t height, const char *text)
+{
+    TE_ImgOpState opStateLess = { .zCompareMode = Z_COMPARE_LESS, .zValue = 255, };
+    // TE_Img_lineRect(screenData, x, y + 5, width, height - 10, DB32Colors[1], opStateLess);
+    // border outline top
+    TE_Img_HLine(screenData, x + 1 + 4, y + 0, width - 2 - 8, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + 1 + 2, y + 1, 2, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + 1 + 1, y + 2, 1, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + width - 5, y + 1, 2, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + width - 3, y + 2, 1, DB32Colors[1], opStateLess);
+
+    TE_Img_VLine(screenData, x + 1, y + 3, 2, DB32Colors[1], opStateLess);
+    TE_Img_VLine(screenData, x + width - 2, y + 3, 2, DB32Colors[1], opStateLess);
+
+    // left and right outline
+    TE_Img_VLine(screenData, x, y + 5, height - 10, DB32Colors[1], opStateLess);
+    TE_Img_VLine(screenData, x + width - 1, y + 5, height - 10, DB32Colors[1], opStateLess);
+
+    // border outline bottom
+    TE_Img_HLine(screenData, x + 1 + 4, y + height - 1, width - 2 - 8, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + 1 + 2, y + height - 2, 2, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + 1 + 1, y + height - 3, 1, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + width - 5, y + height - 2, 2, DB32Colors[1], opStateLess);
+    TE_Img_HLine(screenData, x + width - 3, y + height - 3, 1, DB32Colors[1], opStateLess);
+
+    TE_Img_VLine(screenData, x + 1, y + height - 5, 2, DB32Colors[1], opStateLess);
+    TE_Img_VLine(screenData, x + width - 2, y + height - 5, 2, DB32Colors[1], opStateLess);
+
+    TE_ImgOpState opState = { .zCompareMode = Z_COMPARE_ALWAYS, .zValue = 255, };
+    TE_Img_HLine(screenData, x + 1 + 4, y + 1, width - 2 - 8, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 2, y + 2, width - 2 - 4, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 1, y + 3, width - 2 - 2, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 1, y + 4, width - 2 - 2, DB32Colors[fillColorIndex], opState);
+    TE_Img_fillRect(screenData, x+1, y+5, width-2, height-10, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 1, y + height - 5, width - 2 - 2, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 1, y + height - 4, width - 2 - 2, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 2, y + height - 3, width - 2 - 4, DB32Colors[fillColorIndex], opState);
+    TE_Img_HLine(screenData, x + 1 + 4, y + height - 2, width - 2 - 8, DB32Colors[fillColorIndex], opState);
+    // printf("Drawing text: %s %p\n", text, font.atlas->data);
+    TE_Font font = GameAssets_getFont(0);
+    TE_Font_drawTextBox(screenData, &font, x + 4, y + 4, width - 8, height - 8, -1, -4, text, 0.5f, 0.5f, 0xffffffff, (TE_ImgOpState){
+        .zCompareMode = Z_COMPARE_ALWAYS,
+        .zValue = 255,
+    });
+}
+
+void DrawThoughtBubble(TE_Img *screenData, RuntimeContext *ctx, int16_t x, int16_t y, int16_t width, int16_t height, int16_t srcX, int16_t srcY, const char *text)
+{
+    int baseW = 8;
+    int cx = srcX > x + baseW * 2 ? (srcX < x + width - baseW * 2 ? srcX : x + width - baseW * 2) : x + baseW * 2;
+    int cy = y + height / 2;
+    float px = srcX;
+    float py = srcY;
+    float dx = cx - px;
+    float dy = cy - py;
+    float dist = sqrtf(dx * dx + dy * dy);
+    if (dist > 0)
+    {
+        float nx = dx / dist;
+        float ny = dy / dist;
+        float r = 3.0f;
+        float offset = fmodf(ctx->time * 6.0f, 4.5f);
+        for (float step = 0.0f + offset; step < dist; step += 3.0f + r)
+        {
+            r = step * .3f + 2.0f;
+            float sx = px + nx * step;
+            float sy = py + ny * step;
+            float wobble = sinf(ctx->time * 0.0f + step * 0.2f) * 0.2f * step;
+            sx += wobble * ny;
+            sy -= wobble * nx;
+            TE_Img_lineCircle(screenData, sx, sy, r, DB32Colors[1], (TE_ImgOpState){
+                .zCompareMode = Z_COMPARE_LESS,
+                .zValue = 255,
+            });
+            TE_Img_fillCircle(screenData, sx, sy, r, DB32Colors[20], (TE_ImgOpState){
+                .zCompareMode = Z_COMPARE_LESS,
+                .zValue = 255,
+            });
+
+        }
+    }
+
+    DrawTextBubble(screenData, 20, x, y, width, height, text);
+}
+
 void DrawSpeechBubble(TE_Img *screenData, int16_t x, int16_t y, int16_t width, int16_t height, int16_t arrowX, int16_t arrowY, const char *text)
 {
-    TE_Font font = GameAssets_getFont(0);
-    // TE_Img_drawPatch9(screenData, &font.atlas, x, y, width, height, 0, 0, 0, 0, (BlitEx){
-    //     .blendMode = TE_BLEND_ALPHAMASK,
-    //     .state = {
-    //         .zCompareMode = Z_COMPARE_LESS_EQUAL,
-    //         .zValue = 0,
-    //     }
-    // });
     int baseW = 8;
     int cx = arrowX > x + baseW * 2 ? (arrowX < x + width - baseW * 2 ? arrowX : x + width - baseW * 2) : x + baseW * 2;
     int cy = y + height / 2;
@@ -735,23 +834,10 @@ void DrawSpeechBubble(TE_Img *screenData, int16_t x, int16_t y, int16_t width, i
         .zValue = 255,
     });
     
-
-    TE_Img_lineRect(screenData, x, y, width, height, DB32Colors[1], (TE_ImgOpState){
-        .zCompareMode = Z_COMPARE_LESS,
-        .zValue = 255,
-    });
-    TE_Img_fillRect(screenData, x+1, y+1, width-2, height-2, DB32Colors[21], (TE_ImgOpState){
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
-    // printf("Drawing text: %s %p\n", text, font.atlas->data);
-    TE_Font_drawTextBox(screenData, &font, x + 4, y + 4, width - 8, height - 8, -1, -4, text, 0.5f, 0.5f, 0xffffffff, (TE_ImgOpState){
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 255,
-    });
+    DrawTextBubble(screenData, 21, x, y, width, height, text);
 }
 
-static void Cart_draw(TE_Img *screenData, int16_t x, int16_t y, uint8_t loaded, RuntimeContext *ctx)
+void Cart_draw(TE_Img *screenData, int16_t x, int16_t y, uint8_t loaded, RuntimeContext *ctx)
 {
     TE_Img_blitSprite(screenData, GameAssets_getSprite(SPRITE_CART_SIDE), x, y, (BlitEx){
         .blendMode = TE_BLEND_ALPHAMASK,
@@ -798,126 +884,14 @@ static void Cart_draw(TE_Img *screenData, int16_t x, int16_t y, uint8_t loaded, 
     });
 }
 
-static void Scene_1_update(RuntimeContext *ctx, TE_Img *screenData)
-{
-    // Update scene 1
-    int16_t cartX = player.x - 20;
-    
-    // draw path
-    const uint16_t pathQHeight = 16;
-    for (uint16_t x=0;x<128;x+=2)
-    {
-        uint16_t srcX = x % 16;
-        int16_t y = 50 + (int16_t)(sin((x) * 0.05f) * 5.0f + x * 0.1f);
-
-        TE_Img_blitEx(screenData, &atlasImg, x, y, 71 + srcX, 16, 2, pathQHeight, (BlitEx){
-            .blendMode = TE_BLEND_ALPHAMASK,
-            .state = {
-                .zCompareMode = Z_COMPARE_LESS_EQUAL,
-                .zValue = 0,
-            }
-        });
-        TE_Img_blitEx(screenData, &atlasImg, x, y+pathQHeight, 71 + srcX, 16 + 24, 2, pathQHeight, (BlitEx){
-            .blendMode = TE_BLEND_ALPHAMASK,
-            .state = {
-                .zCompareMode = Z_COMPARE_LESS_EQUAL,
-                .zValue = 0,
-            }
-        });
-    }
-    // TE_Img_drawPatch9(screenData, &atlasImg, -8, 58, 140, 28, 64,16, 12, 12, (BlitEx){
-    //     .blendMode = TE_BLEND_ALPHAMASK,
-    //     .state = {
-    //         .zCompareMode = Z_COMPARE_LESS_EQUAL,
-    //         .zValue = 0,
-    //     }
-    // });
-
-    int16_t cartY = 60 + (int16_t)(sin((cartX) * 0.05f) * 5.0f + cartX * 0.1f);
-    int16_t cartYAnchor = 60 + (int16_t)(sin((cartX+6) * 0.05f) * 5.0f + (cartX + 6) * 0.1f);
-
-    player.y = 54 + (int16_t)(sin((player.x) * 0.05f) * 5.0f + player.x * 0.1f);
-    player.aimY = 1;
-    player.dirY = 1;
-    player.dy = 1;
-    playerCharacter.y = player.y;
-    playerCharacter.dirY = 1;
-
-    Cart_draw(screenData, cartX, cartY,1, ctx);
-
-    TE_Img_line(screenData, cartX+8, cartYAnchor, cartX+20, player.y + 6, DB32Colors[3], (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_LESS_EQUAL,
-        .zValue = 83,
-    });
-    TE_Img_line(screenData, cartX+8, cartYAnchor + 1, cartX+20, player.y + 7, DB32Colors[2], (TE_ImgOpState) {
-        .zCompareMode = Z_COMPARE_LESS_EQUAL,
-        .zValue = 83,
-    });
-
-    const char *text = NULL;
-
-    if (player.x > 108)
-    {
-        text = NULL;
-    }
-    else if (player.x > 80)
-    {
-        text = "I can now get the pool I always wanted!";
-    }
-    else if (player.x > 60)
-    {
-        text = "Finally I can retire.";
-    }
-    else if (player.x > 40)
-    {
-        text = "So. Much. Loot!";
-    }
-    else if (player.x > 20)
-    {
-        text = "The crusades were awesome.";
-    }
-
-    if (text)
-    {
-        DrawSpeechBubble(screenData, 10,20, 108, 30, cartX + 20, player.y - 5, text);
-    }
-
-    if (!ctx->inputRight)
-    {
-        DrawTextBlock(screenData, 70, 105, 48, 16, "Press >");
-    }
-
-    if (player.x < -8)
-    {
-        player.x = -8;
-        playerCharacter.x = player.x;
-    }
-    if (cartX > 130)
-    {
-        Scene_init(2);
-    }
-}
-
-static void Scene_1_init()
-{
-    // Enemies_spawn(1, 28, 42);
-    // Enemies_spawn(1, 44, 28);
-
-    player.x = -8;
-    playerCharacter.x = player.x;
-
-    Environment_addTreeGroup(24, 30, 26, 5, 25);
-    Environment_addTreeGroup(114, 30, 122, 5, 25);
-    Environment_addTreeGroup(114, 125, 1252, 5, 25);
-    Environment_addTreeGroup(24, 124, 99, 5, 20);
-    // Environment_addTreeGroup(64, 84, 199, 3, 20);
-}
+void Scene_1_update(RuntimeContext *ctx, TE_Img *screenData);
+void Scene_1_init(uint8_t sceneId);
 
 #define SCENE_2_FLAG_PULLING_CART 1
 #define SCENE_2_FLAG_DINGLEWORT_OUTSIDE 2
 #define SCENE_2_FLAG_DOOR_OPEN 4
 
-static void Scene_2_init()
+static void Scene_2_init(uint8_t sceneId)
 {
     Environment_addBushGroup(112, 90, 1232, 5, 10);
 
@@ -1098,10 +1072,10 @@ static void Scene_2_init()
     ScriptedAction_addSceneFadeOut(step, step, FADEOUT_RIGHT_TO_LEFT, step + 1, 1.5f, 0.0f, 1.0f);
     step++;
 
-    ScriptedAction_addTitleScreen(step, step, "Part 1", "Where is my loot?", 1, step + 1);
+    ScriptedAction_addTitleScreen(step, step + 1, "Part 1", "Where is my loot?", 1, step + 1);
     step++;
 
-    ScriptedAction_addLoadScene(step, step, SCENE_3_CHASING_THE_LOOT);
+    ScriptedAction_addLoadScene(step, step, SCENE_3_1_AT_THE_BRIDGE);
 }
 
 static void DrawTower(TE_Img *screenData, int16_t x, int16_t y, uint8_t z)
@@ -1147,8 +1121,8 @@ static void Scene_2_update(RuntimeContext *ctx, TE_Img *screenData)
     if (!isPullingCart)
     {
         float x1, y1, x2, y2;
-        Enemies_getPosition(1, &x1, &y1);
-        Enemies_getPosition(2, &x2, &y2);
+        Enemies_getPosition(1, &x1, &y1, 0);
+        Enemies_getPosition(2, &x2, &y2, 0);
         float cx = (x1 + x2) * 0.5f;
         float cy = (y1 + y2) * 0.5f;
         cartX = (int16_t)cx - 4;
@@ -1319,11 +1293,17 @@ static void Scene_2_update(RuntimeContext *ctx, TE_Img *screenData)
 #include "game_scene_0_testing.h"
 #include "game_scene_3.h"
 
+void Scene_played_through_init(uint8_t sceneId);
+void Scene_played_through_update(RuntimeContext *ctx, TE_Img *screen);
+
 static const Scene scenes[] = {
     { .id = SCENE_0_TESTING, .initFn = Scene_0_init, .updateFn = Scene_0_update },
     { .id = SCENE_1_PULLING_THE_CART, .initFn = Scene_1_init, .updateFn = Scene_1_update },
     { .id = SCENE_2_ARRIVING_AT_HOME, .initFn = Scene_2_init, .updateFn = Scene_2_update },
-    { .id = SCENE_3_CHASING_THE_LOOT, .initFn = Scene_3_init, .updateFn = Scene_3_update },
+    { .id = SCENE_3_1_AT_THE_BRIDGE, .initFn = Scene_3_init, .updateFn = Scene_3_update },
+    { .id = SCENE_3_2_FIRST_FIGHT, .initFn = Scene_3_init, .updateFn = Scene_3_update },
+    { .id = SCENE_3_3_SECOND_FIGHT, .initFn = Scene_3_init, .updateFn = Scene_3_update },
+    { .id = SCENE_PLAYED_THROUGH, .initFn = Scene_played_through_init, .updateFn = Scene_played_through_update },
     {0}
 };
 
@@ -1339,6 +1319,8 @@ static uint8_t _currentSceneId = 0xff;
 // does not allow freeing memory, is reset on scene change
 static uint8_t _sceneAllocatorData[0x30000];
 static uint32_t _sceneAllocatorOffset = 0;
+
+// malloc from the scene memory. Memory is zero initialized and not freeable. Will reset on scene change.
 void* Scene_malloc(uint32_t size)
 {
     if (size == 0) return 0;
@@ -1351,6 +1333,15 @@ void* Scene_malloc(uint32_t size)
     void *ptr = &_sceneAllocatorData[_sceneAllocatorOffset];
     _sceneAllocatorOffset += size;
     _sceneAllocatorOffset = ALIGN_VALUE4(_sceneAllocatorOffset);
+    return ptr;
+}
+
+// duplicate a string into the scene memory
+char* Scene_strDup(const char *str, int strlength)
+{
+    if (!str) return NULL;
+    char *ptr = Scene_malloc(strlength + 1);
+    memcpy(ptr, str, strlength);
     return ptr;
 }
 
@@ -1381,7 +1372,8 @@ void Scene_init(uint8_t sceneId)
     {
         if (scenes[i].id == sceneId)
         {
-            scenes[i].initFn();
+            LOG("Init scene %d", sceneId);
+            scenes[i].initFn(sceneId);
             _sceneUpdateFn = scenes[i].updateFn;
             return;
         }

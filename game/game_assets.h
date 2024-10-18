@@ -1,6 +1,7 @@
 #ifndef __GAME_ASSETS_H__
 #define __GAME_ASSETS_H__
 
+#include "game.h"
 #include "TE_Image.h"
 #include "TE_Font.h"
 #include "game_renderobjects.h"
@@ -63,6 +64,25 @@
 #define SPRITE_FLAT_ARROW_2_3150 56
 #define SPRITE_FLAT_ARROW_2_3375 57
 #define SPRITE_CHARACTER_SHADOW 58
+#define SPRITE_EXCLAMATION_MARK 59
+#define SPRITE_TINY_HEART 60
+#define SPRITE_HEART 61
+#define SPRITE_HEART_HALF 62
+#define SPRITE_HEART_EMPTY 63
+#define SPRITE_HOURGLASS_0 64
+#define SPRITE_HOURGLASS_1 65
+#define SPRITE_HOURGLASS_2 66
+#define SPRITE_HOURGLASS_3 67
+#define SPRITE_HOURGLASS_4 68
+#define SPRITE_HOURGLASS_5 69
+#define SPRITE_HOURGLASS_6 70
+#define SPRITE_SHIELD 71
+#define SPRITE_HAND_POINTING_UP 72
+#define SPRITE_BUTTON_A 73
+#define SPRITE_BUTTON_B 74
+#define SPRITE_BUTTON_MENU 75
+#define SPRITE_EMOJI_FEAR 76
+
 
 #define FONT_MEDIUM 0
 #define FONT_LARGE 1
@@ -74,6 +94,7 @@
 #define ANIMATION_STAFF_IDLE 4
 #define ANIMATION_STAFF_ATTACK_HIT 5
 #define ANIMATION_STAFF_AIM 6
+#define ANIMATION_HAND_POINTING_UP 7
 
 #define RENDER_PREFAB_TREE 1
 
@@ -82,5 +103,8 @@ TE_Sprite GameAssets_getSprite(uint8_t index);
 TE_Font GameAssets_getFont(uint8_t index);
 int GameAssets_drawAnimation(uint8_t index, TE_Img *dst, uint32_t msTick, int16_t x, int16_t y, int maxLoopCount, BlitEx blitEx);
 RenderPrefab* GameAssets_getRenderPrefab(uint8_t index, uint8_t variant);
+void GameAssets_drawInputButton(TE_Img *dst, RuntimeContext *ctx, uint16_t button, int16_t x, int16_t y, BlitEx blitEx);
+
+int GameAssets_getMusic(uint8_t id, const char **outData, int *outSize);
 
 #endif

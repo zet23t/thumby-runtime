@@ -2,6 +2,7 @@
 #define __GAME_SCENES_H__
 
 #include <inttypes.h>
+#include "game_menu.h"
 #include "engine_main.h"
 #include "TE_Image.h"
 #include "game.h"
@@ -9,7 +10,10 @@
 #define SCENE_0_TESTING 0
 #define SCENE_1_PULLING_THE_CART 1
 #define SCENE_2_ARRIVING_AT_HOME 2
-#define SCENE_3_CHASING_THE_LOOT 3
+#define SCENE_3_1_AT_THE_BRIDGE 3
+#define SCENE_3_2_FIRST_FIGHT 4
+#define SCENE_3_3_SECOND_FIGHT 5
+#define SCENE_PLAYED_THROUGH 6
 
 #define FADEIN_FLAG 1
 #define FADEOUT_RIGHT_TO_LEFT 0
@@ -35,6 +39,13 @@ typedef struct Condition
         struct WaitCondition {
             float duration;
         } wait;
+        struct CallbackCondition {
+            union {
+                uint8_t (*callbackEx)(RuntimeContext *ctx, TE_Img *screenData, const struct Condition *condition);
+                uint8_t (*callbackRawData)(void *data);
+            };
+            void *callbackData;
+        } callback;
     };
 } Condition;
 
@@ -42,6 +53,10 @@ typedef struct Condition
 #define CONDITION_TYPE_PRESS_NEXT 2
 #define CONDITION_TYPE_NPCS_IN_RECT 3
 #define CONDITION_TYPE_WAIT 4
+// callback with ctx, screenData, and const condition as args
+#define CONDITION_TYPE_CALLBACK 5
+// will call callback with data pointer as only arg
+#define CONDITION_TYPE_CALLBACK_DATA 6
 
 
 typedef struct ScriptedAction
@@ -143,6 +158,8 @@ typedef struct ScriptedAction
                 void *dataPointer;
                 Character *characterPointer;
                 Enemy *enemyPointer;
+                uint32_t iValue;
+                float fValue;
             };
             uint8_t flag;
             int16_t x, y;
@@ -164,12 +181,15 @@ typedef struct ScriptedActions
 typedef struct Scene
 {
     uint8_t id;
-    void (*initFn)();
+    void (*initFn)(uint8_t sceneId);
     void (*updateFn)(RuntimeContext *ctx, TE_Img *screenData);
 } Scene;
 
-// allocates memory with scene lifetime. Can not be freed. Memory space is zeroed.
+void Cart_draw(TE_Img *screenData, int16_t x, int16_t y, uint8_t loaded, RuntimeContext *ctx);
+void DrawTextBlock(TE_Img *screenData, int16_t x, int16_t y, int16_t width, int16_t height, const char *text);
+
 void* Scene_malloc(uint32_t size);
+char* Scene_strDup(const char *str, int strlength);
 uint32_t Scene_getAllocatedSize();
 
 void Scene_init(uint8_t sceneId);
@@ -179,6 +199,7 @@ uint8_t Scene_getMaxStep();
 void Scene_update(RuntimeContext *ctx, TE_Img *screen);
 void ScriptedAction_init();
 ScriptedAction* ScriptedAction_addSpeechBubble(uint8_t stepStart, uint8_t stepStop, const char *text, uint8_t speaker, int16_t speechBubbleX, int16_t speechBubbleY, uint8_t speechBubbleWidth, uint8_t speechBubbleHeight, int8_t arrowXOffset, int8_t arrowYOffset);
+ScriptedAction* ScriptedAction_addThoughtBubble(uint8_t stepStart, uint8_t stepStop, const char *text, uint8_t speaker, int16_t thoughtBubbleX, int16_t thoughtBubbleY, uint8_t thoughtBubbleWidth, uint8_t thoughtBubbleHeight, int8_t arrowXOffset, int8_t arrowYOffset);
 
 void ScriptedAction_addPlayerControlsEnabled(uint8_t stepStart, uint8_t stepStop, uint8_t enabled);
 void ScriptedAction_addSetPlayerTarget(uint8_t stepStart, uint8_t stepStop, int16_t x, int16_t y, uint8_t setX, uint8_t setY);
@@ -205,6 +226,7 @@ void ScriptedAction_update(RuntimeContext *ctx, TE_Img *screenData);
 uint8_t Scene_getCurrentSceneId();
 
 void DrawSpeechBubble(TE_Img *screenData, int16_t x, int16_t y, int16_t width, int16_t height, int16_t arrowX, int16_t arrowY, const char *text);
+void DrawThoughtBubble(TE_Img *screenData, RuntimeContext *ctx, int16_t x, int16_t y, int16_t width, int16_t height, int16_t srcX, int16_t srcY, const char *text);
 void DrawNextButtonAction(RuntimeContext *ctx, TE_Img *screenData);
 
 #endif

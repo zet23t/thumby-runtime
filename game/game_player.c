@@ -4,6 +4,7 @@
 #include "game_enemies.h"
 #include "game_assets.h"
 #include "game_particlesystem.h"
+#include "game_menu.h"
 #include "TE_Image.h"
 #include "TE_rand.h"
 #include "TE_math.h"
@@ -23,17 +24,17 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
 {
     if (_playerInputEnabled)
     {
-        if (ctx->inputUp || ctx->inputDown)
+        if ((ctx->inputUp || ctx->inputDown) && !Menu_isActive())
         {
             player->dirX = player->dirY = 0;
         }
 
-        if (ctx->inputUp)
+        if (ctx->inputUp && !Menu_isActive())
         {
             player->dy = -1;
             player->dirY = -1;
         }
-        else if (ctx->inputDown)
+        else if (ctx->inputDown && !Menu_isActive())
         {
             player->dy = 1;
             player->dirY = 1;
@@ -43,12 +44,12 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
             player->dy = 0;
         }
 
-        if (ctx->inputLeft)
+        if (ctx->inputLeft && !Menu_isActive())
         {
             player->dx = -1;
             player->dirX = -1;
         }
-        else if (ctx->inputRight)
+        else if (ctx->inputRight && !Menu_isActive())
         {
             player->dx = 1;
             player->dirX = 1;
@@ -110,7 +111,7 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
     Item *item = &items[_playerWeaponIndex > 0 ? _playerWeaponIndex - 1 : 0];
     float coolDown = item->cooldown;
 
-    if (ctx->inputA && 0 && _playerWeaponIndex)
+    if (ctx->inputA && 0 && _playerWeaponIndex && !Menu_isActive())
     {
         playerCharacter->isAiming = 1;
         // playerCharacter->itemRightHand = -2;
@@ -274,6 +275,7 @@ void Player_update(Player *player, Character *playerCharacter, RuntimeContext *c
         }
         // TE_Logf("DBG", "Player target %f %f : %f %f", targetX, targetY, player->dirX, player->dirY);
     }
+    // LOG("Player %f %f %f %f %d %d", player->x, player->y, targetX, targetY, dirX, dirY);
     Character_update(playerCharacter, ctx, img, targetX, targetY, dirX, dirY);
     player->x = playerCharacter->x * .15f + player->x * .85f;
     player->y = playerCharacter->y * .15f + player->y * .85f;

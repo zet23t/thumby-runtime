@@ -18,6 +18,8 @@
 
 typedef struct Scene3_EnemyCrowd Scene3_EnemyCrowd;
 
+void Scene_3_drawKOEnemy(RuntimeContext *ctx, TE_Img *screenData, ScriptedAction *action);
+
 typedef struct Scene3_EnemyData
 {
     Scene3_EnemyCrowd *crowd;
@@ -58,12 +60,16 @@ void BattleMenu_drawActionBars(RuntimeContext *ctx, TE_Img *screen, BattleState 
         .zAlphaBlend = 0,
     });
     uint32_t colors[5] = {0x33ff8888, 0x336688ff, 0x336688ff, 0x336688ff, 0x336688ff};
-    uint32_t targettedColors[5] = {0x33ff8888, 0x3366aaff, 0x3366aaff, 0x3366aaff, 0x3366aaff};
+    // uint32_t targettedColors[5] = {0x33ff8888, 0x3366aaff, 0x3366aaff, 0x3366aaff, 0x3366aaff};
     const int16_t pxPerAP = 4;
     
     for (int i=0;i<battleState->entityCount;i++)
     {
         BattleEntityState *entity = &battleState->entities[i];
+        if (entity->hitpoints <= 0)
+        {
+            continue;
+        }
         int16_t x = divX2 + 1 + i * 4;
         uint32_t color = colors[i];
         for (int ap=1;ap * pxPerAP < h; ap++)
@@ -119,91 +125,16 @@ void BattleMenu_drawActionBars(RuntimeContext *ctx, TE_Img *screen, BattleState 
 
 void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *action)
 {
-    // draw battle menu
-    BattleMenuWindow window = {
-        .x = -1,
-        .y = -1,
-        .w = 130,
-        .h = 44,
-        .divX = 80,
-        .divX2 = 106,
-        .lineHeight = 11,
-        .selectedColor = 0x660099ff
-    };
-
     Player_setInputEnabled(0);
     BattleState *battleState = (BattleState*)action->customCallback.dataPointer;
     battleState->timer += ctx->deltaTime;
 
-    // Handle running action
-    if (battleState->queuedEntityId >= 0)
-    {
-        BattleEntityState *entity = &battleState->entities[battleState->queuedEntityId];
-        BattleAction *action = &entity->actionNTList[battleState->queuedActionId];
-        if (!action->onActivated || action->onActivated(ctx, screen, battleState, action, entity))
-        {
-            battleState->activatingAction = -1;
-            battleState->queuedEntityId = -1;
-            battleState->queuedActionId = -1;
-            entity->actionPoints += action->actionPointCosts;
-            LOG("Action %s (%d) done; Entity %d at %d", action->name, action->actionPointCosts, entity->id, entity->actionPoints);
-        }
+    BattleState_updateActiveActions(ctx, screen, battleState);
 
-        BattleMenu_drawActionBars(ctx, screen, battleState, 0, &window);
-        return;
-    }
-
-    // Handle activating action; find out lowest AP
-    int8_t lowestAP = 127;
-    for (int i=0;i<battleState->entityCount;i++)
-    {
-        BattleEntityState *entity = &battleState->entities[i];
-        if (entity->actionPoints < lowestAP)
-        {
-            lowestAP = entity->actionPoints;
-        }
-    }
-
-    // decrease AP of all entities unless player has 1 AP; player actions can happen at AP 1 or AP 0. NPCs only at AP 0
-    if (battleState->entities[0].actionPoints > 0)
-    {
-        if (battleState->timer > 0.25f)
-        {
-            uint8_t scheduledAction = 0;
-            for (int i=0;i<battleState->entityCount;i++)
-            {
-                BattleEntityState *entity = &battleState->entities[i];
-                // LOG("Entity %d/%d at %d", entity->id, entity->team, entity->actionPoints);
-                if (entity->team == 1 && entity->actionPoints == 0)
-                {
-                    // AI enemy turn
-                    battleState->queuedEntityId = i;
-                    battleState->queuedActionId = 0;
-                    battleState->timer = 0.0f;
-                    scheduledAction = 1;
-                    LOG("Scheduling action of enemy %d at %d", entity->id, entity->actionPoints);
-                    break;
-                }
-            }
-            if (!scheduledAction)
-            {
-                for (int i=0;i<battleState->entityCount;i++)
-                {
-                    BattleEntityState *entity = &battleState->entities[i];
-                    if (entity->actionPoints > 0)
-                        entity->actionPoints -= 1;
-                }
-            }
-            battleState->timer = 0.0f;
-        }
-        BattleMenu_drawActionBars(ctx, screen, battleState, 0, &window);
-
-        return;
-    }
-
+    // update entities with enemies
     
     BattleEntityState *playerEntity = &battleState->entities[0];
-    // draw player target selection
+
     for (int i=0;i<battleState->entityCount;i++)
     {
         BattleEntityState *entity = &battleState->entities[i];
@@ -220,61 +151,34 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
             BattlePosition* targetPosition = &battleState->positions[targetEntity->position];
             playerCharacter.dirX = sign_f(targetPosition->x - playerCharacter.x);
             playerCharacter.dirY = sign_f(targetPosition->y - playerCharacter.y);
-
-            // int16_t anim = (int)(fmodf(ctx->time * 2.0f, 1.0f) * 3);
-            // TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_FLAT_ARROW_UP_RIGHT), targetPosition->x - 6 + anim, targetPosition->y + 4 - anim, (BlitEx)
-            // {
-            //     .blendMode = TE_BLEND_ALPHAMASK,
-            //     .tint = 1,
-            //     .tintColor = DB32Colors[DB32_ORANGE],
-            //     .state = (TE_ImgOpState){
-            //         .zCompareMode = Z_COMPARE_LESS,
-            //         .zValue = targetPosition->y + 8,
-            //         .zAlphaBlend = 1,
-            //     }
-            // });
-            // TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_FLAT_ARROW_UP_LEFT), targetPosition->x + 4 - anim, targetPosition->y + 4 - anim, (BlitEx)
-            // {
-            //     .blendMode = TE_BLEND_ALPHAMASK,
-            //     .tint = 1,
-            //     .tintColor = DB32Colors[DB32_ORANGE],
-            //     .state = (TE_ImgOpState){
-            //         .zCompareMode = Z_COMPARE_LESS,
-            //         .zValue = targetPosition->y + 8,
-            //         .zAlphaBlend = 1,
-            //     }
-            // });
-            // TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_FLAT_ARROW_DOWN_RIGHT), targetPosition->x - 6 + anim, targetPosition->y - 4 + anim, (BlitEx)
-            // {
-            //     .blendMode = TE_BLEND_ALPHAMASK,
-            //     .tint = 1,
-            //     .tintColor = DB32Colors[DB32_ORANGE],
-            //     .state = (TE_ImgOpState){
-            //         .zCompareMode = Z_COMPARE_LESS,
-            //         .zValue = targetPosition->y + 5,
-            //         .zAlphaBlend = 1,
-            //     }
-            // });
-            // TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_FLAT_ARROW_DOWN_LEFT), targetPosition->x + 4 - anim, targetPosition->y - 4 + anim, (BlitEx)
-            // {
-            //     .blendMode = TE_BLEND_ALPHAMASK,
-            //     .tint = 1,
-            //     .tintColor = DB32Colors[DB32_ORANGE],
-            //     .state = (TE_ImgOpState){
-            //         .zCompareMode = Z_COMPARE_LESS,
-            //         .zValue = targetPosition->y + 5,
-            //         .zAlphaBlend = 1,
-            //     }
-            // });
         }
         else
         {
-            Enemy* enemy = Enemies_getEnemy(entity->id);
-            if (enemy == 0)
+            Enemy* enemy = Enemies_getEnemy(entity->id, 1);
+            if (enemy == 0 && entity->hitpoints > 0)
             {
                 Enemies_spawn(entity->id, entity->characterType, targetX, targetY);
             }
-            else
+            else if (enemy && entity->hitpoints <= 0)
+            {
+                LOG("Enemy %d is defeated", entity->id);
+                if (enemy->health > 0.0f)
+                {
+                    ScriptedAction* action = ScriptedAction_addCustomCallback(0, 0xff, Scene_3_drawKOEnemy);
+                    LOG("Setting KO enemy %d callback", entity->id);
+                    action->customCallback.iValue = enemy->id;
+                    action->customCallback.x = enemy->character.x;
+                    action->customCallback.y = enemy->character.y;
+                    float vx = 15.0f;
+                    float vy = 0.0f;
+                    enemy->character.targetX = enemy->character.x + vx * 0.05f;
+                    enemy->character.targetY = enemy->character.y + vy * 0.05f;
+                    action->customCallback.flag = 0;
+                    action->actionStartTime = ctx->time;
+                }
+                enemy->health = 0.0f;
+            }
+            else if (enemy)
             {
                 BattlePosition *position = &battleState->positions[entity->position];
                 BattlePosition *targetPosition = &battleState->positions[entity->target];
@@ -289,13 +193,92 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
         }
     }
 
+    // Handle running action
+    if (battleState->queuedEntityId >= 0)
+    {
+        BattleEntityState *entity = &battleState->entities[battleState->queuedEntityId];
+        BattleAction *action = &entity->actionNTList[battleState->queuedActionId];
+        uint8_t result;
+        if (battleState->queuedActionActivated == 0)
+        {
+            result = BATTLEACTION_ONACTIVATING_DONE;
+            if (action->onActivating)
+            {
+                result = action->onActivating(ctx, screen, battleState, action, entity);
+            }
+            if (result == BATTLEACTION_ONACTIVATING_DONE)
+            {
+                battleState->queuedActionActivated = 1;
+            }
+        }
+        else if (!action->onActivated || (result = action->onActivated(ctx, screen, battleState, action, entity)))
+        {
+            if (result == BATTLEACTION_ONACTIVATED_ISACTIVE && action->onActive)
+            {
+                LOG("Action %s (%d) is active; Entity %d at %d", action->name, action->actionPointCosts, entity->id, entity->actionPoints);
+                battleState->activeActions[battleState->queuedEntityId] = action;
+            }
+            battleState->activatingAction = -1;
+            battleState->queuedEntityId = -1;
+            battleState->queuedActionId = -1;
+            entity->actionPoints += action->actionPointCosts;
+            entity->lastActionAtCounter = battleState->actionCounter;
+            LOG("Action %s (%d) done; Entity %d at %d", action->name, action->actionPointCosts, entity->id, entity->actionPoints);
+        }
+
+        BattleMenu_drawActionBars(ctx, screen, battleState, 0, &battleState->menuWindow);
+        
+        return;
+    }
+
+    // decrease AP of all entities unless player has 1 AP; player actions can happen at AP 1 or AP 0. NPCs only at AP 0
+    if (battleState->entities[0].actionPoints > 0)
+    {
+        if (battleState->timer > 0.25f)
+        {
+            uint8_t scheduledAction = 0;
+            for (int i=0;i<battleState->entityCount;i++)
+            {
+                BattleEntityState *entity = &battleState->entities[i];
+                // LOG("Entity %d/%d at %d", entity->id, entity->team, entity->actionPoints);
+                if (entity->team == 1 && entity->actionPoints == 0 && entity->hitpoints > 0)
+                {
+                    // AI enemy turn
+                    battleState->queuedEntityId = i;
+                    battleState->queuedActionId = 0;
+                    battleState->queuedActionActivated = 0;
+                    battleState->timer = 0.0f;
+                    scheduledAction = 1;
+
+                    LOG("Scheduling action of enemy %d at %d", entity->id, entity->actionPoints);
+                    break;
+                }
+            }
+            if (!scheduledAction)
+            {
+                for (int i=0;i<battleState->entityCount;i++)
+                {
+                    BattleEntityState *entity = &battleState->entities[i];
+                    if (entity->actionPoints > 0 && entity->hitpoints > 0)
+                        entity->actionPoints -= 1;
+                }
+                battleState->actionCounter += 1;
+                LOG("--> Action counter: %d", battleState->actionCounter);
+            }
+            battleState->timer = 0.0f;
+        }
+        BattleMenu_drawActionBars(ctx, screen, battleState, 0, &battleState->menuWindow);
+
+        return;
+    }
+
+    
+
     int16_t x = -1, y = -1;
     int16_t w = 130, h = 44;
 
     int16_t divX = 80;
     int16_t divX2 = divX + 26;
-    const int16_t lineHeight = 11;
-    const uint32_t selectedColor = 0x660099ff;
 
     TE_Img_fillRect(screen, x, y, w, h, 0x88000000 | (0xffffff & DB32Colors[15]), (TE_ImgOpState){
         .zCompareMode = Z_COMPARE_ALWAYS,
@@ -308,19 +291,7 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
         .zAlphaBlend = 1,
     });
     
-    TE_Font font = GameAssets_getFont(FONT_MEDIUM);
     int8_t selectedAPUse = 0;
-    uint8_t maxSelectableActions;
-
-    // draw battle actions
-    TE_ImgOpState actionState = (TE_ImgOpState){
-        .zCompareMode = Z_COMPARE_ALWAYS,
-        .zValue = 201,
-        .scissorX = 0,
-        .scissorY = 0,
-        .scissorWidth = divX2,
-        .scissorHeight = h - 2
-    };
     if (battleState->activatingAction >= 0)
     {
         BattleAction *action = &playerEntity->actionNTList[battleState->activatingAction];
@@ -338,9 +309,7 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
                 battleState->queuedActionId = battleState->selectedAction;
                 battleState->queuedEntityId = 0;
                 battleState->timer = 0.0f;
-                // if (action->onActivated)
-                //     battleState->activatingAction = -2;
-                
+                battleState->queuedActionActivated = 1;
             }
         }
         else
@@ -351,59 +320,14 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
     }
     else
     {
-        int16_t actionScrollListOffset = max_s16(0, (battleState->selectedAction - 2) * lineHeight);
-        for (maxSelectableActions=0; playerEntity->actionNTList[maxSelectableActions].name; maxSelectableActions++)
-        {
-            BattleAction *action = &playerEntity->actionNTList[maxSelectableActions];
-            if (maxSelectableActions == battleState->selectedAction)
-            {
-                selectedAPUse = action->actionPointCosts;
+        BattleMenuWindow_update(ctx, screen, &battleState->menuWindow, &battleState->menu);
+        battleState->selectedAction = battleState->menu.selectedAction;
+        BattleAction *action = &playerEntity->actionNTList[battleState->selectedAction];
+        selectedAPUse = action->actionPointCosts;
 
-                if (action->onSelected && action->onSelected(ctx, screen, battleState, action, playerEntity) == BATTLEACTION_ONSELECTED_ACTIVATE)
-                {
-                    battleState->activatingAction = battleState->selectedAction;
-                }
-            }
-            int16_t actionY = maxSelectableActions * lineHeight - actionScrollListOffset;
-            TE_Font_drawTextBox(screen, &font, 8 + x, actionY, 80, h, -1, -3, action->name, 0.0f, 0.0f, 0xffffffff, actionState);
-            char buffer[16];
-            snprintf(buffer, sizeof(buffer), "%d AP", action->actionPointCosts);
-            TE_Font_drawTextBox(screen, &font, 83 + x, actionY, 40, h, -1, -3, buffer, 0.0f, 0.0f, 0xffffffff, actionState);
-        }
-
-        // selection highlight
-        int16_t selectedY = y + battleState->selectedAction * lineHeight + 2 - actionScrollListOffset;
-        TE_Img_fillRect(screen, x + 1, selectedY, divX2 - 1, lineHeight + 1, selectedColor, (TE_ImgOpState){
-            .zCompareMode = Z_COMPARE_LESS_EQUAL,
-            .zValue = 200,
-            .zAlphaBlend = 1,
-        });
-        TE_Img_fillTriangle(screen, x + 1, selectedY, x + 6, selectedY + lineHeight / 2, x + 1, selectedY + lineHeight, 0xaa0099ff, (TE_ImgOpState){
-            .zCompareMode = Z_COMPARE_LESS_EQUAL,
-            .zValue = 200,
-            .zAlphaBlend = 1,
-        });
-        TE_Img_fillTriangle(screen, divX - 2, selectedY, divX - 7, selectedY + lineHeight / 2, divX - 2, selectedY + lineHeight, 0xaa0099ff, (TE_ImgOpState){
-            .zCompareMode = Z_COMPARE_LESS_EQUAL,
-            .zValue = 200,
-            .zAlphaBlend = 1,
-        });
-
-        if (ctx->inputUp && !ctx->prevInputUp)
+        if (action->onSelected && action->onSelected(ctx, screen, battleState, action, playerEntity) == BATTLEACTION_ONSELECTED_ACTIVATE)
         {
-            battleState->selectedAction--;
-            if (battleState->selectedAction < 0)
-            {
-                battleState->selectedAction = 0;
-            }
-        }
-        if (ctx->inputDown && !ctx->prevInputDown)
-        {
-            battleState->selectedAction++;
-            if (battleState->selectedAction >= maxSelectableActions)
-            {
-                battleState->selectedAction = maxSelectableActions - 1;
-            }
+            battleState->activatingAction = battleState->selectedAction;
         }
     }
 
@@ -412,14 +336,38 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
     for (int i=0;i<battleState->entityCount;i++)
     {
         BattleEntityState *entity = &battleState->entities[i];
+        if (entity->hitpoints <= 0)
+            continue;
+        BattlePosition *position = &battleState->positions[entity->position];
+        for (int j=0;j<entity->hitpoints;j++)
+        {
+            TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_TINY_HEART), position->x - 4 + j * 3, position->y + 5, (BlitEx) {
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .state = {
+                    .zCompareMode = Z_COMPARE_LESS_EQUAL,
+                    .zValue = position->y + 15,
+                }
+            });
+        }
         if (entity->team == 1 && entity->actionPoints < futureAP)
         {
-            BattlePosition *position = &battleState->positions[entity->position];
-            TE_Img_HLine(screen, position->x - 4, position->y + 3, 8, 0xff0000ff, (TE_ImgOpState){
-                .zCompareMode = Z_COMPARE_LESS_EQUAL,
-                .zValue = 200,
-                .zAlphaBlend = 1,
+            float blink = fabsf(fmodf(ctx->time * 1.0f, 1.0f) - .5f) * 3.0f;
+            uint8_t alpha = (uint8_t)fminf(blink * 255.0f, 255.0f);
+            TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_EXCLAMATION_MARK), position->x, position->y - 18, (BlitEx){
+                .blendMode = TE_BLEND_ALPHAMASK,
+                .tint = 1,
+                .tintColor = (DB32Colors[DB32_ORANGE] & 0xffffff) | (alpha << 24),
+                .state = (TE_ImgOpState){
+                    .zCompareMode = Z_COMPARE_LESS_EQUAL,
+                    .zValue = position->y + 18,
+                    .zAlphaBlend = 1,
+                }
             });
+            // TE_Img_HLine(screen, position->x - 4, position->y + 3, 8, 0xff0000ff, (TE_ImgOpState){
+            //     .zCompareMode = Z_COMPARE_LESS_EQUAL,
+            //     .zValue = 200,
+            //     .zAlphaBlend = 1,
+            // });
         }
     }
 
@@ -434,24 +382,48 @@ void Scene_3_battleStart(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *ac
         .zAlphaBlend = 1,
     });
 
-    BattleMenu_drawActionBars(ctx, screen, battleState, selectedAPUse, &window);
+    BattleMenu_drawActionBars(ctx, screen, battleState, selectedAPUse, &battleState->menuWindow);
     
     
 }
 
-void Scene_3_init()
+uint8_t BattleState_getAliveTeamBits(BattleState *state)
 {
-    Environment_addTreeGroup(20, 20, 18522, 4, 20);
-    Environment_addTree(88,20,124);
-    Environment_addTree(114,34,125);
-    Environment_addTree(108,14,125);
-    Environment_addTree(120,20,125);
-    Environment_addTree(94,20,125);
-    // Environment_addTreeGroup(100, 20, 1856, 5, 30);
-    Environment_addFlowerGroup(76,40, 232, 15, 20);
-    Environment_addBushGroup(75,35, 1232, 5, 10);
+    uint8_t aliveTeamBits = 0;
+    for (int i=0;i<state->entityCount;i++)
+    {
+        BattleEntityState *entity = &state->entities[i];
+        if (entity->hitpoints > 0)
+        {
+            aliveTeamBits |= 1 << entity->team;
+        }
+    }
 
+    return aliveTeamBits;
+}
 
+uint8_t BattleState_haveNPCsWon(BattleState *state)
+{
+    return BattleState_getAliveTeamBits(state) == 2;
+}
+
+uint8_t BattleState_hasPlayerWon(BattleState *state)
+{
+    return BattleState_getAliveTeamBits(state) == 1;
+}
+
+uint8_t BattleState_isExecutingAction(BattleState *state)
+{
+    return state->queuedEntityId >= 0;
+}
+
+uint8_t BattleState_isWaiting(BattleState *state)
+{
+    return state->queuedEntityId < 0;
+}
+
+static void Scene_3_subscene_1_init(uint8_t sceneId)
+{
     player.x = 160;
     playerCharacter.x = player.x;
     player.y = 110;
@@ -459,8 +431,8 @@ void Scene_3_init()
 
     uint8_t step = 0;
 
-    ScriptedAction_addSetPlayerTarget(step, step, 90, 73, 1, 1);
-    ScriptedAction_addPlayerControlsEnabled(step, step, 0);
+    ScriptedAction_addSetPlayerTarget(step, 0xff, 90, 73, 1, 1);
+    ScriptedAction_addPlayerControlsEnabled(step, 0xff, 0);
     ScriptedAction_addSceneFadeOut(step, step, FADEIN_RIGHT_TO_LEFT, step + 1, 0.85f, 0.4f, 1.0f);
     step++;
 
@@ -468,8 +440,8 @@ void Scene_3_init()
     ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
     step++;
 
-    ScriptedAction_addNPCSpawn(step, step, 1, 3, -5, 60, 60, 70);
-    ScriptedAction_addNPCSpawn(step, step, 2, 4, -20, 60, 50, 66);
+    ScriptedAction_addNPCSpawn(step, step + 50, 1, 3, -5, 60, 60, 70);
+    ScriptedAction_addNPCSpawn(step, step + 50, 2, 4, -20, 60, 50, 66);
     ScriptedAction_addSpeechBubble(step, step, "Lucky we maintain the bridge so faithfully!", 1, 8, 4, 112, 38, 0, -10);
     ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
     step++;
@@ -543,9 +515,8 @@ void Scene_3_init()
     step++;
 
     
-    ScriptedAction_addNPCSpawn(step, step, 3, 3, 100, 0, 100, 40);
-    ScriptedAction_addNPCSpawn(step, step, 4, 4, 130, 120, 100, 96);
-    ScriptedAction_addPlayerControlsEnabled(step, step, 1);
+    ScriptedAction_addNPCSpawn(step, step + 50, 3, 3, 100, 0, 100, 40);
+    ScriptedAction_addNPCSpawn(step, step + 50, 4, 4, 130, 120, 100, 96);
     ScriptedAction_addSetItem(step, step+2, 0, 0, ITEM_STAFF);
     ScriptedAction_addSetItem(step, step+2, 1, 0, ITEM_STAFF);
     ScriptedAction_addSetItem(step, step+2, 2, -ITEM_STAFF, 0);
@@ -553,8 +524,72 @@ void Scene_3_init()
     ScriptedAction_addSetItem(step, step+2, 4, 0, ITEM_STAFF);
 
     ScriptedAction_addSpeechBubble(step, step, "Fine, let's have some fun first.", 0, 4, 4, 70, 48, -4, -8);
-    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_WAIT, .wait.duration = 2.5f });
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
     step++;
+    
+    ScriptedAction_addSpeechBubble(step, step, "Your name must be Sir Bigmouth.", 1, 8, 4, 112, 38, 0, -10);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+
+    ScriptedAction_addSpeechBubble(step, step, "You know what?", 1, 8, 4, 112, 38, 0, -10);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+
+    ScriptedAction_addSpeechBubble(step, step, "Just you, and me. I'll teach you some manners.", 1, 8, 4, 112, 38, 0, -10);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+
+    ScriptedAction_addSpeechBubble(step, step, "Hahaha. That'll be too easy.", 0, 4, 4, 70, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+
+    ScriptedAction_addLoadScene(step, step, SCENE_3_2_FIRST_FIGHT);
+}
+
+static void Scene_3_drawPointerToStrike(RuntimeContext *ctx, TE_Img *screen, ScriptedAction *callback)
+{
+    BattleState *battleState = (BattleState*)callback->customCallback.dataPointer;
+    int select = 1;
+    if (battleState->entities[1].hitpoints < 3)
+    {
+        select = 0;
+    }
+    int16_t x = 60, y = 5 + battleState->menuWindow.lineHeight * select - BattleMenuWindow_getScrollListOffset(&battleState->menuWindow, &battleState->menu);
+    GameAssets_drawAnimation(ANIMATION_HAND_POINTING_UP, screen, 0, x, y, 0xffff, 
+        (BlitEx) {
+            .blendMode = TE_BLEND_ALPHAMASK,
+            .state = {
+                .zCompareMode = Z_COMPARE_LESS_EQUAL,
+                .zValue = 220,
+            }
+        });
+    uint8_t inputGuide = INPUT_BUTTON_DOWN;
+    if (battleState->selectedAction > select)
+    {
+        inputGuide = INPUT_BUTTON_UP;
+    }
+    else if (battleState->selectedAction == select)
+    {
+        inputGuide = INPUT_BUTTON_A;
+    }
+
+    GameAssets_drawInputButton(screen, ctx, inputGuide, x + 2, y + 18, (BlitEx) {
+        .blendMode = TE_BLEND_ALPHAMASK,
+        .state = {
+            .zCompareMode = Z_COMPARE_LESS_EQUAL,
+            .zValue = 220,
+        }
+    });
+}
+
+static void Scene_3_subscene_2_init(uint8_t sceneId)
+{
+    uint8_t step = 0;
+
+    player.x = 90;
+    playerCharacter.x = player.x;
+    player.y = 73;
+    playerCharacter.y = player.y;
 
     // Scene3_EnemyCrowd *crowd = Scene_malloc(sizeof(Scene3_EnemyCrowd));
     // crowd->aliveCount = 4;
@@ -580,25 +615,38 @@ void Scene_3_init()
     //     .callback = Scene_3_enemyCallback,
     //     .dataPointer = &crowd->enemies[3],
     // });
+
+    
+    ScriptedAction_addNPCSpawn(step, step, 1, 3, 60, 70, 60, 70);
+    ScriptedAction_addNPCSpawn(step, step, 2, 4, 50, 66, 50, 66);
+    ScriptedAction_addNPCSpawn(step, step, 3, 3, 100, 40, 100, 40);
+    ScriptedAction_addNPCSpawn(step, step, 4, 4, 100, 96, 100, 96);
+    ScriptedAction_addSetItem(step, step+2, 0, 0, ITEM_STAFF);
+    ScriptedAction_addSetItem(step, step+2, 1, 0, ITEM_STAFF);
+    ScriptedAction_addSetItem(step, step+2, 2, -ITEM_STAFF, 0);
+    ScriptedAction_addSetItem(step, step+2, 3, 0, -ITEM_STAFF);
+    ScriptedAction_addSetItem(step, step+2, 4, 0, ITEM_STAFF);
+
+    ScriptedAction_addPlayerControlsEnabled(step, step, 0);
     
     ScriptedAction_addJumpStep(step, step, step + 1);
     step++;
-
+    
     BattleAction *playerActions = Scene_malloc(sizeof(BattleAction) * 8);
     BattleMenu *changeTargetMenu = Scene_malloc(sizeof(BattleMenu));
     changeTargetMenu->selectedAction = 0;
 
     playerActions[0] = BattleAction_Thrust();
-    playerActions[1] = (BattleAction) {
-        .name = "Parry",
-        .actionPointCosts = 3,
-    };
-    playerActions[2] = BattleAction_Strike();
-    playerActions[3] = BattleAction_ChangeTarget();
-    playerActions[4] = (BattleAction) {
-        .name = "Insult",
-        .actionPointCosts = 1,
-    };
+    playerActions[1] = BattleAction_Strike();
+    playerActions[2] = BattleAction_Parry();
+    playerActions[3] = BattleAction_Insult((const char *[]){
+        "A fine swing ... for a child!",
+        "I've seen trees move faster than you.",
+        "Aiming for the air, are we?",
+        "Did you all practice missing together?",
+        0
+    });
+    playerActions[4] = BattleAction_ChangeTarget();
 
     BattleAction *npcActions = Scene_malloc(sizeof(BattleAction) * 8);
     npcActions[0] = BattleAction_Thrust();
@@ -606,19 +654,22 @@ void Scene_3_init()
     BattleState *battleState = Scene_malloc(sizeof(BattleState));
     battleState->queuedEntityId = -1;
     battleState->activatingAction = -1;
-    battleState->entityCount = 5;
+    battleState->entityCount = 2;
     for (int i=0;i<5;i++)
     {
         battleState->entities[i].id = i;
         battleState->entities[i].team = i > 0 ? 1 : 0;
         battleState->entities[i].actionPoints = i == 0 ? 1 : 4 + i;
-        battleState->entities[i].hitpoints = 6;
+        battleState->entities[i].hitpoints = 3;
+        battleState->entities[i].maxHitpoints = 3;
         battleState->entities[i].position = i;
         if (i > 0)
         {
             battleState->entities[i].actionNTList = npcActions;
         }
     }
+    battleState->entities[0].hitpoints = 5;
+    battleState->entities[0].maxHitpoints = 5;
     battleState->entities[0].target = 1;
     battleState->entities[0].actionNTList = playerActions;
     battleState->entities[1].name = "Lenny";
@@ -636,19 +687,251 @@ void Scene_3_init()
     battleState->positions[3] = (BattlePosition){.x = 70, .y = 110};
     battleState->positions[4] = (BattlePosition){.x = 110, .y = 110};
 
-    ScriptedAction *battleAction = ScriptedAction_addCustomCallback(step, step, Scene_3_battleStart);
+    battleState->menuWindow.x = -1;
+    battleState->menuWindow.y = -1;
+    battleState->menuWindow.w = 130;
+    battleState->menuWindow.h = 44;
+    battleState->menuWindow.divX = 80;
+    battleState->menuWindow.divX2 = 106;
+    battleState->menuWindow.lineHeight = 11;
+    battleState->menuWindow.selectedColor = 0x660099ff;
+
+    BattleMenuEntry *mainEntries = Scene_malloc(sizeof(BattleMenuEntry) * 5);
+    for (int i=0;i<5;i++)
+    {
+        mainEntries[i] = BattleMenuEntry_fromAction(&playerActions[i]);
+    }
+
+    battleState->menu = (BattleMenu){
+        .selectedAction = 0,
+        .entries = mainEntries,
+        .entriesCount = 5,
+    };
+
+    ScriptedAction *battleAction = ScriptedAction_addCustomCallback(step, step + 3, Scene_3_battleStart);
     battleAction->customCallback.dataPointer = battleState;
     // fight
-    step++;
-    LOG("final Step: %d", step);
-    ScriptedAction_addSpeechBubble(step, step, "Aaaand I am done here.", 0, 4, 4, 70, 48, -4, -8);
 
+    ScriptedAction_addCustomCallback(step, step, Scene_3_drawPointerToStrike)->customCallback.dataPointer = battleState;
+    ScriptedAction_addThoughtBubble(step, step, "He's slow. I'll do a quick strike before he can act.", 0, 8, 90, 112, 40, 0, 8);
+
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ 
+        .type = CONDITION_TYPE_CALLBACK_DATA,
+        .callback.callbackRawData = (uint8_t(*)(void*)) BattleState_isExecutingAction,
+        .callback.callbackData = battleState
+    });
+    step++;
+    
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ 
+        .type = CONDITION_TYPE_CALLBACK_DATA,
+        .callback.callbackRawData = (uint8_t(*)(void*)) BattleState_isWaiting,
+        .callback.callbackData = battleState
+    });
+
+    step++;
+    ScriptedAction_addCustomCallback(step, step, Scene_3_drawPointerToStrike)->customCallback.dataPointer = battleState;
+    ScriptedAction_addThoughtBubble(step, step, "Hehe, he looks shaky, a thrust with my staff and he's done.", 0, 8, 90, 112, 40, 0, 8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ 
+        .type = CONDITION_TYPE_CALLBACK_DATA,
+        .callback.callbackRawData = (uint8_t(*)(void*)) BattleState_hasPlayerWon,
+        .callback.callbackData = battleState
+    });
+    step++;
+    
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ 
+        .type = CONDITION_TYPE_WAIT,
+        .wait.duration = 1.0f
+    });
+
+    step++;
+    ScriptedAction_addSpeechBubble(step, step, "OH MY GOD, HE KILLED LENNY!", 2, 4, 4, 70, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+    ScriptedAction_addSpeechBubble(step, step, TX_WAVY(10, 20, 25, 1) "I am not dead ... my head is just spinning... really fast", 1, 4, 4, 120, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+    ScriptedAction_addSpeechBubble(step, step, "Don't be silly, of course he's not dead ...", 0, 4, 4, 120, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+    ScriptedAction_addSpeechBubble(step, step, "... if I wanted him dead, I wouldn't have hit his head!", 0, 4, 4, 120, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+    ScriptedAction_addSpeechBubble(step, step, "Ok guys, uh, you go for him ...", 2, 4, 4, 120, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+    ScriptedAction_addSpeechBubble(step, step, "... while I guard the bridge. " TX_SPRITE(SPRITE_EMOJI_FEAR, 1, 3), 2, 4, 4, 120, 48, -4, -8);
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ .type = CONDITION_TYPE_PRESS_NEXT });
+    step++;
+    ScriptedAction_addLoadScene(step, step, SCENE_3_3_SECOND_FIGHT);
+    LOG("final Step: %d", step);
+}
+
+static void Scene_3_subscene_3_init(uint8_t sceneId)
+{
+    uint8_t step = 0;
+
+    player.x = 90;
+    playerCharacter.x = player.x;
+    player.y = 73;
+    playerCharacter.y = player.y;
+
+    ScriptedAction_addNPCSpawn(step, step+10, 1, 3, 70, 58, 70, 58);
+    ScriptedAction_addNPCSpawn(step, step+10, 2, 4, 50, 66, 50, 66);
+    ScriptedAction_addNPCSpawn(step, step, 3, 3, 100, 40, 100, 40);
+    ScriptedAction_addNPCSpawn(step, step, 4, 4, 100, 96, 100, 96);
+    ScriptedAction_addSetNPCHealth(step, step+10, 1, 0.0f);
+    ScriptedAction *lennyKO = ScriptedAction_addCustomCallback(step, step+10, Scene_3_drawKOEnemy);
+    lennyKO->customCallback.iValue = 1;
+    lennyKO->customCallback.x = 70;
+    lennyKO->customCallback.y = 58;
+    lennyKO->customCallback.flag = 1;
+    lennyKO->actionStartTime = -10.0f;
+
+    ScriptedAction_addSetItem(step, step+2, 0, 0, ITEM_STAFF);
+    ScriptedAction_addSetItem(step, step+2, 1, 0, ITEM_STAFF);
+    ScriptedAction_addSetItem(step, step+2, 2, -ITEM_STAFF, 0);
+    ScriptedAction_addSetItem(step, step+2, 3, 0, -ITEM_STAFF);
+    ScriptedAction_addSetItem(step, step+2, 4, 0, ITEM_STAFF);
+    ScriptedAction_addSetPlayerTarget(step, step, 90, 73, 1, 1);
+
+    ScriptedAction_addPlayerControlsEnabled(step, step, 0);
+    
+    ScriptedAction_addJumpStep(step, step, step + 1);
+    step++;
+    
+    BattleAction *playerActions = Scene_malloc(sizeof(BattleAction) * 8);
+    BattleMenu *changeTargetMenu = Scene_malloc(sizeof(BattleMenu));
+    changeTargetMenu->selectedAction = 0;
+
+    playerActions[0] = BattleAction_Thrust();
+    playerActions[1] = BattleAction_Strike();
+    playerActions[2] = BattleAction_Parry();
+    playerActions[3] = BattleAction_Insult((const char *[]){
+        "A fine swing ... for a child!",
+        "I've seen trees move faster than you.",
+        "Aiming for the air, are we?",
+        "Did you all practice missing together?",
+        0
+    });
+    playerActions[4] = BattleAction_ChangeTarget();
+
+    BattleAction *npcActions = Scene_malloc(sizeof(BattleAction) * 8);
+    npcActions[0] = BattleAction_Thrust();
+
+    BattleState *battleState = Scene_malloc(sizeof(BattleState));
+    battleState->queuedEntityId = -1;
+    battleState->activatingAction = -1;
+    battleState->entityCount = 3;
+    for (int i=0;i<3;i++)
+    {
+        battleState->entities[i].id = i > 0 ? i + 2 : 0;
+        battleState->entities[i].team = i > 0 ? 1 : 0;
+        battleState->entities[i].actionPoints = i == 0 ? 1 : 4 + i;
+        battleState->entities[i].hitpoints = 3;
+        battleState->entities[i].maxHitpoints = 3;
+        battleState->entities[i].position = i;
+        if (i > 0)
+        {
+            battleState->entities[i].actionNTList = npcActions;
+        }
+    }
+    battleState->entities[0].hitpoints = 5;
+    battleState->entities[0].maxHitpoints = 5;
+    battleState->entities[0].target = 1;
+    battleState->entities[0].actionNTList = playerActions;
+    
+    battleState->entities[1].name = "Chuck";
+    battleState->entities[1].characterType = 3;
+    battleState->entities[2].name = "Mart";
+    battleState->entities[2].characterType = 4;
+
+    battleState->positions[0] = (BattlePosition){.x = 90, .y = 85};
+    battleState->positions[1] = (BattlePosition){.x = 110, .y = 70};
+    battleState->positions[2] = (BattlePosition){.x = 70, .y = 110};
+    battleState->positions[3] = (BattlePosition){.x = 110, .y = 110};
+
+    battleState->positions[4] = (BattlePosition){.x = 70, .y = 70};
+
+    battleState->menuWindow.x = -1;
+    battleState->menuWindow.y = -1;
+    battleState->menuWindow.w = 130;
+    battleState->menuWindow.h = 44;
+    battleState->menuWindow.divX = 80;
+    battleState->menuWindow.divX2 = 106;
+    battleState->menuWindow.lineHeight = 11;
+    battleState->menuWindow.selectedColor = 0x660099ff;
+
+    BattleMenuEntry *mainEntries = Scene_malloc(sizeof(BattleMenuEntry) * 5);
+    for (int i=0;i<5;i++)
+    {
+        mainEntries[i] = BattleMenuEntry_fromAction(&playerActions[i]);
+    }
+
+    battleState->menu = (BattleMenu){
+        .selectedAction = 0,
+        .entries = mainEntries,
+        .entriesCount = 5,
+    };
+
+    ScriptedAction *battleAction = ScriptedAction_addCustomCallback(step, step + 3, Scene_3_battleStart);
+    battleAction->customCallback.dataPointer = battleState;
+
+    step++;
+
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ 
+        .type = CONDITION_TYPE_CALLBACK_DATA,
+        .callback.callbackRawData = (uint8_t(*)(void*)) BattleState_hasPlayerWon,
+        .callback.callbackData = battleState
+    });
+    step++;
+    
+    ScriptedAction_addProceedPlotCondition(step, step, step + 1, (Condition){ 
+        .type = CONDITION_TYPE_WAIT,
+        .wait.duration = 1.0f
+    });
+    step++;
+
+    ScriptedAction_addLoadScene(step, step, SCENE_3_3_SECOND_FIGHT);
+    LOG("final Step: %d", step);
+}
+
+void Scene_3_init(uint8_t sceneId)
+{
+    sdfMap = 0;
+    Environment_addTreeGroup(20, 20, 18522, 4, 20);
+    Environment_addTree(88,20,124);
+    Environment_addTree(114,34,125);
+    Environment_addTree(108,14,125);
+    Environment_addTree(120,20,125);
+    Environment_addTree(94,20,125);
+    // Environment_addTreeGroup(100, 20, 1856, 5, 30);
+    Environment_addFlowerGroup(76,40, 232, 15, 20);
+    Environment_addBushGroup(75,35, 1232, 5, 10);
+
+
+    switch (sceneId)
+    {
+        case SCENE_3_1_AT_THE_BRIDGE:
+            Scene_3_subscene_1_init(sceneId);
+            break;
+        case SCENE_3_2_FIRST_FIGHT:
+            Scene_3_subscene_2_init(sceneId);
+            break;
+        case SCENE_3_3_SECOND_FIGHT:
+            Scene_3_subscene_3_init(sceneId);
+            break;
+    }
 
 }
 
 void Scene_3_drawKOEnemy(RuntimeContext *ctx, TE_Img *screenData, ScriptedAction *action)
 {
-    Enemy *enemy = action->customCallback.enemyPointer;
+    Enemy *enemy = Enemies_getEnemy(action->customCallback.iValue, 1);
+    if (!enemy)
+    {
+        LOG("Enemy not found %d", action->customCallback.iValue);
+        return;
+    }
     float t = ctx->time - action->actionStartTime;
     float x = action->customCallback.x;
     float y = action->customCallback.y;
@@ -706,10 +989,10 @@ void Scene_3_drawKOEnemy(RuntimeContext *ctx, TE_Img *screenData, ScriptedAction
 static void Scene_3_enemyTookDamage(struct Enemy *enemy, float damage, float vx, float vy, RuntimeContext *ctx, TE_Img *screen)
 {
     Scene3_EnemyData *data = (Scene3_EnemyData*)enemy->userCallbackData.dataPointer;
-    LOG("Callback: Enemy took damage %f, aliveCount=%d, selectedAttacker=%d, %p", damage, data->crowd->aliveCount, data->crowd->selectedAttacker, Enemies_getEnemy(data->crowd->selectedAttacker));
+    LOG("Callback: Enemy took damage %f, aliveCount=%d, selectedAttacker=%d, %p", damage, data->crowd->aliveCount, data->crowd->selectedAttacker, Enemies_getEnemy(data->crowd->selectedAttacker, 0));
     int seekIncrement = TE_randRange(1, 11);
     while (data->crowd->aliveCount > 1 && (data->crowd->selectedAttacker == enemy->id ||
-        !Enemies_getEnemy(data->crowd->selectedAttacker)))
+        !Enemies_getEnemy(data->crowd->selectedAttacker, 0)))
     {
         player.defenseActionStep[0] = 0.0f;
         data->crowd->selectedAttacker = (data->crowd->selectedAttacker + seekIncrement - 1) % 4 + 1;
@@ -730,7 +1013,7 @@ static void Scene_3_enemyTookDamage(struct Enemy *enemy, float damage, float vx,
             Scene_setStep(data->crowd->nextStepOnDefeated);
         }
         ScriptedAction* action = ScriptedAction_addCustomCallback(0, 0xff, Scene_3_drawKOEnemy);
-        action->customCallback.dataPointer = enemy;
+        action->customCallback.iValue = enemy->id;
         action->customCallback.x = enemy->character.x;
         action->customCallback.y = enemy->character.y;
         enemy->character.targetX = enemy->character.x + vx * 0.05f;
@@ -772,7 +1055,7 @@ static void Scene_3_updateEnemy(struct Enemy *enemy, RuntimeContext *ctx, TE_Img
             if (playerDistance < 18.0f)
             {
                 player.defenseActionStep[0]+=ctx->deltaTime;
-                if (!ctx->inputA && ctx->prevInputA && player.defenseQuality > 0)
+                if (!ctx->inputA && ctx->prevInputA && player.defenseQuality > 0 && !Menu_isActive())
                 {
                     data->crowd->selectedAttacker = 0;
                     enemy->character.isAiming = 0;

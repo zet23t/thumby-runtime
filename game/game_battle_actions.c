@@ -1,6 +1,13 @@
+#include "game_scenes.h"
 #include "game_battle_actions.h"
 #include "TE_math.h"
 
+//# Overview
+// Thrust action: Hits the target strongly, dealing 2 damage + 1 action point loss.
+// Strike action: Hits the target, dealing 1 damage + 1 action point loss.
+// Parry action: Blocks all next attacks.
+
+//# Thrust action
 
 static uint8_t BattleAction_Thrust_OnActivated(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
 {
@@ -8,22 +15,23 @@ static uint8_t BattleAction_Thrust_OnActivated(RuntimeContext *ctx, TE_Img *scre
     BattleEntityState *target = &battleState->entities[actor->target];
     BattlePosition targetPosition = battleState->positions[target->position];
     float position = battleState->timer / 0.5f;
-    float mirrored = 1.0f - fabsf(1.0f - position);
-    float bumped = max_f(0.0f, mirrored * 10.0f - 9.0f);
+    float pingpong = 1.0f - fabsf(1.0f - position);
+    float bumped = max_f(0.0f, pingpong * 10.0f - 9.0f);
     float dx = targetPosition.x - attackerPosition.x;
     float dy = targetPosition.y - attackerPosition.y;
     float len = sqrtf(dx * dx + dy * dy);
     if (len < 1.0f)
     {
-        return 1;
+        LOG("Invalid positionings / targets");
+        return BATTLEACTION_ONACTIVATED_DONE;
     }
     float nx = dx / len;
     float ny = dy / len;
     float tx = targetPosition.x - nx * 6.0f;
     float ty = targetPosition.y - ny * 6.0f;
     // LOG("Thrust activated %.2f", mirrored);
-    int16_t cx = attackerPosition.x + (tx - attackerPosition.x) * mirrored;
-    int16_t cy = attackerPosition.y + (ty - attackerPosition.y) * mirrored;
+    int16_t cx = attackerPosition.x + (tx - attackerPosition.x) * pingpong;
+    int16_t cy = attackerPosition.y + (ty - attackerPosition.y) * pingpong;
     if (position >= 2.0f)
     {
         cx = attackerPosition.x;
@@ -32,7 +40,7 @@ static uint8_t BattleAction_Thrust_OnActivated(RuntimeContext *ctx, TE_Img *scre
 
     Character *character = actor->id == 0 ? &playerCharacter : &enemies[actor->id - 1].character;
 
-    float jump = sinf(mirrored * TE_PI * 0.85f);
+    float jump = sinf(pingpong * TE_PI * 0.85f);
 
     character->targetX = character->x = cx;
     character->targetY = character->y = cy - 10;
@@ -42,20 +50,28 @@ static uint8_t BattleAction_Thrust_OnActivated(RuntimeContext *ctx, TE_Img *scre
     targetCharacter->targetX = targetCharacter->x = targetPosition.x + nx * bumped * 3.0f;
     targetCharacter->targetY = targetCharacter->y = targetPosition.y + ny * bumped * 3.0f - 10;
 
-
-
-    // TE_Img_fillCircle(screen, cx, cy, 2, 0xff0000ff, (TE_ImgOpState){
-    //     .zCompareMode = Z_COMPARE_LESS,
-    //     .zValue = cy + 20,
-    //     .zAlphaBlend = 1,
-    // });
-    return position >= 2.0f;
+    if (position >= 1.0f && (action->statusFlags & 1) == 0)
+    {
+        action->statusFlags |= 1;
+        if (battleState->entities[actor->target].hitpoints > 2)
+        {
+            battleState->entities[actor->target].hitpoints -= 2;
+        }
+        else
+        {
+            battleState->entities[actor->target].hitpoints = 0;
+        }
+        battleState->entities[actor->id].actionPoints += 1;
+        LOG("Thrust of %d hits %d, hp=%d", actor->id, actor->target, battleState->entities[actor->target].hitpoints);
+    }
+    return position >= 2.0f ? BATTLEACTION_ONACTIVATED_DONE : BATTLEACTION_ONACTIVATED_CONTINUE;
 }
 
 static uint8_t BattleAction_Thrust_OnActivating(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
 {
     LOG("Thrust activating");
-    return 1;
+    action->statusFlags = 0;
+    return BATTLEACTION_ONACTIVATING_DONE;
 }
 
 static uint8_t BattleAction_Thrust_OnSelected(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
@@ -87,13 +103,16 @@ static uint8_t BattleAction_Thrust_OnSelected(RuntimeContext *ctx, TE_Img *scree
         }
     });
 
-    return ctx->inputA && !ctx->prevInputA ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
+    return ctx->inputA && !ctx->prevInputA && !Menu_isActive() ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
 }
 
 BattleAction BattleAction_Thrust()
 {
     return (BattleAction){
-        .name = "Thrust",
+        .name = "Thrust: " 
+            TX_SPRITE(SPRITE_HEART_HALF, 2, 2) TX_MOVECURSOR_X(253) 
+            TX_SPRITE(SPRITE_HEART_HALF, 2, 2) TX_MOVECURSOR_X(2)
+            TX_SPRITE(SPRITE_HOURGLASS_6, 2, 2),
         .actionPointCosts = 6,
         .onActivated = BattleAction_Thrust_OnActivated,
         .onActivating = BattleAction_Thrust_OnActivating,
@@ -101,17 +120,72 @@ BattleAction BattleAction_Thrust()
     };
 }
 
+//# Strike action
+
 static uint8_t BattleAction_Strike_OnActivated(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
 {
     LOG("Strike activated %.2f", battleState->timer);
+    BattlePosition attackerPosition = battleState->positions[actor->position];
+    BattleEntityState *target = &battleState->entities[actor->target];
+    BattlePosition targetPosition = battleState->positions[target->position];
+    float position = battleState->timer / 0.25f;
+    float mirrored = 1.0f - fabsf(1.0f - position);
+    float bumped = max_f(0.0f, mirrored * 10.0f - 9.0f);
+    float dx = targetPosition.x - attackerPosition.x;
+    float dy = targetPosition.y - attackerPosition.y;
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len < 1.0f)
+    {
+        return BATTLEACTION_ONACTIVATED_DONE;
+    }
+    float nx = dx / len;
+    float ny = dy / len;
+    float tx = targetPosition.x - nx * 6.0f;
+    float ty = targetPosition.y - ny * 6.0f;
+    // LOG("Thrust activated %.2f", mirrored);
+    int16_t cx = attackerPosition.x + (tx - attackerPosition.x) * mirrored;
+    int16_t cy = attackerPosition.y + (ty - attackerPosition.y) * mirrored;
+    if (position >= 2.0f)
+    {
+        cx = attackerPosition.x;
+        cy = attackerPosition.y;
+    }
+
+    Character *character = actor->id == 0 ? &playerCharacter : &enemies[actor->id - 1].character;
+
+    float jump = sinf(mirrored * TE_PI * 0.85f);
+
+    character->targetX = character->x = cx;
+    character->targetY = character->y = cy - 10;
+    character->flyHeight = max_f(0.0f, jump - .5f) * 15.0f;
+
+    Character *targetCharacter = actor->target == 0 ? &playerCharacter : &enemies[actor->target - 1].character;
+    targetCharacter->targetX = targetCharacter->x = targetPosition.x + nx * bumped * 3.0f;
+    targetCharacter->targetY = targetCharacter->y = targetPosition.y + ny * bumped * 3.0f - 10;
+
     
-    return 1;
+    if (position >= 1.0f && (action->statusFlags & 1) == 0)
+    {
+        LOG("Strike of %d hits %d", actor->id, actor->target);
+        action->statusFlags |= 1;
+        if (battleState->entities[actor->target].hitpoints > 1)
+        {
+            battleState->entities[actor->target].hitpoints -= 1;
+        }
+        else
+        {
+            battleState->entities[actor->target].hitpoints = 0;
+        }
+    }
+
+    return position >= 2.0f ? BATTLEACTION_ONACTIVATED_DONE : BATTLEACTION_ONACTIVATED_CONTINUE;
 }
 
 static uint8_t BattleAction_Strike_OnActivating(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
 {
     LOG("Strike activating");
-    return 1;
+    action->statusFlags = 0;
+    return BATTLEACTION_ONACTIVATING_DONE;
 }
 
 static uint8_t BattleAction_Strike_OnSelected(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
@@ -143,13 +217,13 @@ static uint8_t BattleAction_Strike_OnSelected(RuntimeContext *ctx, TE_Img *scree
         }
     });
 
-    return ctx->inputA && !ctx->prevInputA ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
+    return ctx->inputA && !ctx->prevInputA && !Menu_isActive() ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
 }
 
 BattleAction BattleAction_Strike()
 {
     return (BattleAction){
-        .name = "Strike",
+        .name = "Strike: " TX_SPRITE(SPRITE_HEART_HALF, 2, 2),
         .actionPointCosts = 4,
         .onActivated = BattleAction_Strike_OnActivated,
         .onActivating = BattleAction_Strike_OnActivating,
@@ -157,12 +231,14 @@ BattleAction BattleAction_Strike()
     };
 }
 
+//# Change target action
+
 static uint8_t BattleAction_ChangeTarget_OnSelected(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
 {
     for (int i=0;i<battleState->entityCount;i++)
     {
         BattleEntityState *entity = &battleState->entities[i];
-        if (entity->team != actor->team)
+        if (entity->team != actor->team && entity->hitpoints > 0)
         {
             BattlePosition *position = &battleState->positions[entity->position];
             TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_FLAT_ARROW_DOWN), position->x - 1, position->y - 14, (BlitEx)
@@ -178,7 +254,7 @@ static uint8_t BattleAction_ChangeTarget_OnSelected(RuntimeContext *ctx, TE_Img 
             });
         }
     }
-    return !ctx->prevInputA && ctx->inputA ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
+    return !ctx->prevInputA && ctx->inputA && !Menu_isActive() ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
 }
 
 static uint8_t BattleAction_ChangeTarget_OnActivated(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
@@ -187,7 +263,7 @@ static uint8_t BattleAction_ChangeTarget_OnActivated(RuntimeContext *ctx, TE_Img
     if (progress >= 1.0f)
     {
         actor->target = actor->nextTarget;
-        return 1;
+        return BATTLEACTION_ONACTIVATED_DONE;
     }
     actor->actionTimer += ctx->deltaTime;
     progress = fTweenElasticOut(progress);
@@ -213,7 +289,7 @@ static uint8_t BattleAction_ChangeTarget_OnActivated(RuntimeContext *ctx, TE_Img
         }
     });
 
-    return 0;
+    return BATTLEACTION_ONACTIVATED_CONTINUE;
 }
 
 static uint8_t BattleAction_ChangeTarget_OnActivating (RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
@@ -237,7 +313,7 @@ static uint8_t BattleAction_ChangeTarget_OnActivating (RuntimeContext *ctx, TE_I
     for (int i=0;i<battleState->entityCount;i++)
     {
         BattleEntityState *entity = &battleState->entities[i];
-        if (entity->team != actor->team)
+        if (entity->team != actor->team && entity->hitpoints > 0)
         {
             entries[entriesCount++] = BattleMenuEntryDef(entity->name,actor->target == i ? "0 AP" : "2 AP", i);
 
@@ -272,16 +348,22 @@ static uint8_t BattleAction_ChangeTarget_OnActivating (RuntimeContext *ctx, TE_I
         .selectedColor = 0x660099ff,
     };
 
-    BattleMenu battleMenu = {
-        .selectedAction = action->selectedAction,
-        .entries = entries,
-        .entriesCount = entriesCount,
-    };
-    BattleMenuWindow_update(ctx, screen, &window, &battleMenu);
-    action->selectedAction = battleMenu.selectedAction;
-    if (ctx->inputA && !ctx->prevInputA)
+    if (action->menu == 0)
     {
-        int id = battleMenu.entries[battleMenu.selectedAction].id;
+        action->menu = Scene_malloc(sizeof(BattleMenu));
+        *action->menu = (BattleMenu) {
+            .selectedAction = action->selectedAction,
+        };
+    }
+
+    action->menu->entries = entries,
+    action->menu->entriesCount = entriesCount,
+
+    BattleMenuWindow_update(ctx, screen, &window, action->menu);
+    action->selectedAction = action->menu->selectedAction;
+    if (ctx->inputA && !ctx->prevInputA && !Menu_isActive())
+    {
+        int id = action->menu->entries[action->menu->selectedAction].id;
         if (id == idCancel)
         {
             return BATTLEACTION_ONACTIVATING_CANCEL;
@@ -290,7 +372,7 @@ static uint8_t BattleAction_ChangeTarget_OnActivating (RuntimeContext *ctx, TE_I
         actor->nextTarget = id;
         return BATTLEACTION_ONACTIVATING_DONE;
     }
-    if (ctx->inputB)
+    if (ctx->inputB && !Menu_isActive())
     {
         return BATTLEACTION_ONACTIVATING_CANCEL;
     }
@@ -305,5 +387,167 @@ BattleAction BattleAction_ChangeTarget()
         .onActivated = BattleAction_ChangeTarget_OnActivated,
         .onActivating = BattleAction_ChangeTarget_OnActivating,
         .onSelected = BattleAction_ChangeTarget_OnSelected,
+    };
+}
+
+//# Parry action
+
+typedef struct ParryData
+{
+    uint8_t lockedHealth;
+} ParryData;
+
+static uint8_t BattleAction_Parry_OnSelected(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    return ctx->inputA && !ctx->prevInputA && !Menu_isActive() ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
+}
+
+static uint8_t BattleAction_Parry_OnActivated(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    // LOG("Parry activated %.2f", action->actionTimer);
+    float progress = action->actionTimer / 1.0f;
+    action->actionTimer += ctx->deltaTime;
+    if (progress >= 1.0f)
+    {
+        return BATTLEACTION_ONACTIVATED_ISACTIVE;
+    }
+    return BATTLEACTION_ONACTIVATED_CONTINUE;
+}
+
+static uint8_t BattleAction_Parry_OnActivating(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    LOG("Parry activating");
+    ParryData *data = (ParryData*)action->userData;
+    data->lockedHealth = actor->hitpoints;
+    action->actionTimer = 0;
+
+    return BATTLEACTION_ONACTIVATING_DONE;
+}
+
+static uint8_t BattleAction_parry_OnActive(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    ParryData *data = (ParryData*)action->userData;
+    if (data->lockedHealth > actor->hitpoints)
+    {
+        actor->hitpoints = data->lockedHealth;
+    }
+    BattlePosition *position = &battleState->positions[actor->position];
+    TE_Img_blitSprite(screen, GameAssets_getSprite(SPRITE_SHIELD), position->x - 1, position->y - 14, (BlitEx)
+    {
+        .blendMode = TE_BLEND_ALPHAMASK,
+        .state = (TE_ImgOpState){
+            .zCompareMode = Z_COMPARE_LESS,
+            .zValue = position->y + 20,
+            .zAlphaBlend = 1,
+        }
+    });
+
+    return actor->lastActionAtCounter + action->actionPointCosts > battleState->actionCounter ? BATTLEACTION_ONACTIVE_CONTINUE : BATTLEACTION_ONACTIVE_DONE;
+}
+
+BattleAction BattleAction_Parry()
+{
+    return (BattleAction){
+        .name = "Parry: " TX_SPRITE(SPRITE_SHIELD, 2, 2),
+        .actionPointCosts = 3,
+        .userData = Scene_malloc(sizeof(ParryData)),
+        .onActivated = BattleAction_Parry_OnActivated,
+        .onActivating = BattleAction_Parry_OnActivating,
+        .onSelected = BattleAction_Parry_OnSelected,
+        .onActive = BattleAction_parry_OnActive,
+    };
+}
+
+//# Insult action
+
+static uint8_t BattleAction_Insult_OnSelected(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    return ctx->inputA && !ctx->prevInputA && !Menu_isActive() ? BATTLEACTION_ONSELECTED_ACTIVATE : BATTLEACTION_ONSELECTED_IGNORE;
+}
+
+static uint8_t BattleAction_Insult_OnActivated(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    BattlePosition *position = &battleState->positions[actor->position];
+    BattleMenuEntry *entries = (BattleMenuEntry*)action->userData;
+    const char *text = entries[action->selectedAction].menuText;
+
+    DrawSpeechBubble(screen, 4, 4, 100, 40, position->x, position->y - 20, text);
+    if (!ctx->prevInputA && ctx->inputA && !Menu_isActive())
+    {
+        BattleEntityState *target = &battleState->entities[actor->target];
+        target->actionPoints += 2;
+        return BATTLEACTION_ONACTIVATED_DONE;
+    }
+    return BATTLEACTION_ONACTIVATED_CONTINUE;
+}
+
+static uint8_t BattleAction_Insult_OnActivating(RuntimeContext *ctx, TE_Img *screen, BattleState *battleState, BattleAction *action, BattleEntityState *actor)
+{
+    const int idCancel = 8;
+    BattleMenuEntry *entries = (BattleMenuEntry*)action->userData;
+    uint8_t entriesCount = 0;
+    for (entriesCount=0;entries[entriesCount].menuText;entriesCount++);
+    
+    BattleMenuWindow window = {
+        .x = -1,
+        .y = -1,
+        .w = 130,
+        .h = 44,
+        .divX = 80,
+        .divX2 = 106,
+        .lineHeight = 11,
+        .selectedColor = 0x660099ff,
+    };
+
+    if (action->menu == 0)
+    {
+        action->menu = Scene_malloc(sizeof(BattleMenu));
+        *action->menu = (BattleMenu) {
+            .selectedAction = action->selectedAction,
+        };
+    }
+
+    action->menu->entries = entries;
+    action->menu->entriesCount = entriesCount;
+    BattleMenuWindow_update(ctx, screen, &window, action->menu);
+    action->selectedAction = action->menu->selectedAction;
+    if (ctx->inputA && !ctx->prevInputA && !Menu_isActive())
+    {
+        int id = action->menu->entries[action->menu->selectedAction].id;
+        LOG("Insulting id: %d", id);
+        if (id == idCancel)
+        {
+            return BATTLEACTION_ONACTIVATING_CANCEL;
+        }
+        actor->actionTimer = 0.0f;
+        actor->nextTarget = id;
+        return BATTLEACTION_ONACTIVATING_DONE;
+    }
+    if (ctx->inputB && !Menu_isActive())
+    {
+        return BATTLEACTION_ONACTIVATING_CANCEL;
+    }
+    return BATTLEACTION_ONACTIVATING_CONTINUE;
+}
+
+BattleAction BattleAction_Insult(const char** insults)
+{
+    BattleMenuEntry *entries = Scene_malloc(sizeof(BattleMenuEntry) * 8);
+    
+    const int idCancel = 8;
+    uint8_t entriesCount = 0;
+    for (int i=0;insults[i];i++)
+    {
+        entries[entriesCount++] = BattleMenuEntryDef(insults[i], "2 AP", i);
+    }
+    entries[entriesCount++] = BattleMenuEntryDef("Cancel", 0, idCancel);
+
+    return (BattleAction){
+        .name = "Insult: " TX_SPRITE(SPRITE_HOURGLASS_6, 2, 2) TX_MOVECURSOR_X(253) TX_SPRITE(SPRITE_HOURGLASS_6, 2, 2),
+        .userData = entries,
+        .actionPointCosts = 1,
+        .onActivated = BattleAction_Insult_OnActivated,
+        .onActivating = BattleAction_Insult_OnActivating,
+        .onSelected = BattleAction_Insult_OnSelected,
     };
 }

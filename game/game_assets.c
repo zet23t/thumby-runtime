@@ -76,6 +76,24 @@ static const SpriteData _sprites[] = {
     {248, 112, 7, 8, 4, 4},   // SPRITE_FLAT_ARROW_2_3150
     {248, 120, 7, 8, 4, 4},   // SPRITE_FLAT_ARROW_2_3375
     {16, 136, 12, 6, 6, 3},   // SPRITE_CHARACTER_SHADOW
+    {107, 136, 5, 13, 2, 9},  // SPRITE_EXCLAMATION_MARK
+    {107, 148, 5, 5, 2, 2},   // SPRITE_TINY_HEART
+    {0, 112, 9, 9, 4, 4},     // SPRITE_HEART
+    {9, 112, 9, 9, 4, 4},     // SPRITE_HEART_HALF
+    {18, 112, 9, 9, 4, 4},    // SPRITE_HEART_EMPTY
+    {105, 153, 7, 9, 3, 4},     // SPRITE_HOURGLASS_0
+    {105, 161, 7, 9, 3, 4},     // SPRITE_HOURGLASS_1
+    {105, 169, 7, 9, 3, 4},     // SPRITE_HOURGLASS_2
+    {105, 177, 7, 9, 3, 4},     // SPRITE_HOURGLASS_3
+    {105, 185, 7, 9, 3, 4},     // SPRITE_HOURGLASS_4
+    {105, 193, 7, 9, 3, 4},     // SPRITE_HOURGLASS_5
+    {105, 201, 7, 9, 3, 4},     // SPRITE_HOURGLASS_6
+    {98, 166, 7, 9, 3, 4},     // SPRITE_SHIELD
+    {112, 200, 14, 15, 3, 1},  // SPRITE_HAND_POINTING_UP
+    {248, 128, 8, 8, 4, 4},   // SPRITE_BUTTON_A
+    {248, 136, 8, 8, 4, 4},   // SPRITE_BUTTON_B
+    {248, 144, 8, 8, 4, 4},   // SPRITE_BUTTON_MENU
+    {80, 244, 11, 12, 5, 5},  // SPRITE_EMOJI_FEAR
 };
 
 static SpriteData _getSpriteData(uint8_t index)
@@ -165,6 +183,13 @@ static int DrawAnimation_STAFF_AIM(TE_Img *dst, uint32_t msTick, int16_t x, int1
     return 1;
 }
 
+static int DrawAnimation_HAND_POINTING_UP(TE_Img *dst, uint32_t msTick, int16_t x, int16_t y, int maxLoopCount, BlitEx blitEx)
+{
+    float t = msTick * 0.001f;
+    y += absi((int16_t)(sinf(t * 5.0f) * 3.0f));
+    TE_Img_blitSprite(dst, GameAssets_getSprite(SPRITE_HAND_POINTING_UP), x, y, blitEx);
+    return 1;
+}
 
 int GameAssets_drawAnimation(uint8_t index, TE_Img *dst, uint32_t msTick, int16_t x, int16_t y, int maxLoopCount, BlitEx blitEx)
 {
@@ -183,8 +208,50 @@ int GameAssets_drawAnimation(uint8_t index, TE_Img *dst, uint32_t msTick, int16_
         return DrawAnimation_STAFF_HIT(dst, msTick, x, y, maxLoopCount, 0, blitEx);
     case ANIMATION_STAFF_IDLE:
         return DrawAnimation_STAFF_IDLE(dst, msTick, x, y, maxLoopCount, blitEx);
+    case ANIMATION_HAND_POINTING_UP:
+        return DrawAnimation_HAND_POINTING_UP(dst, msTick, x, y, maxLoopCount, blitEx);
     }
     return 0;
+}
+
+void GameAssets_drawInputButton(TE_Img *dst, RuntimeContext *ctx, uint16_t button, int16_t x, int16_t y, BlitEx blitEx)
+{
+    int32_t offset = absi((int32_t)(sinf(ctx->time * 5.0f) * 2.0f));
+    TE_Img_fillCircle(dst, x, y, 6, DB32Colors[DB32_BROWN], blitEx.state);
+    TE_Img_lineCircle(dst, x, y, 6, DB32Colors[DB32_BLACK], blitEx.state);
+    TE_Img_fillCircle(dst, x, y-3 + offset, 6, DB32Colors[DB32_ORANGE], blitEx.state);
+    TE_Img_lineCircle(dst, x, y-3 + offset, 6, DB32Colors[DB32_BLACK], blitEx.state);
+
+    TE_Sprite sprite;
+    switch (button)
+    {
+    case INPUT_BUTTON_UP:
+        sprite = GameAssets_getSprite(SPRITE_FLAT_ARROW_2_0000);
+        break;
+    case INPUT_BUTTON_DOWN:
+        sprite = GameAssets_getSprite(SPRITE_FLAT_ARROW_2_1800);
+        break;
+    case INPUT_BUTTON_LEFT:
+        sprite = GameAssets_getSprite(SPRITE_FLAT_ARROW_2_0900);
+        break;
+    case INPUT_BUTTON_RIGHT:
+        sprite = GameAssets_getSprite(SPRITE_FLAT_ARROW_2_2700);
+        break;
+    case INPUT_BUTTON_A:
+        sprite = GameAssets_getSprite(SPRITE_BUTTON_A);
+        break;
+    case INPUT_BUTTON_B:
+        sprite = GameAssets_getSprite(SPRITE_BUTTON_B);
+        break;
+    case INPUT_BUTTON_MENU:
+        sprite = GameAssets_getSprite(SPRITE_BUTTON_MENU);
+        break;
+    
+    default:
+        return;
+    }
+
+    TE_Img_blitSprite(dst, sprite, x + 1, y + offset - 2, blitEx);
 }
 
 static TE_Img tinyImg;
@@ -507,4 +574,24 @@ RenderPrefab* GameAssets_getRenderPrefab(uint8_t id, uint8_t variant)
             
     }
     return prefab;
+}
+
+#include "mod_1987_tune.h"
+#include "mod_2_core.h"
+#include "mod_4mat_wizardry.h"
+#include "mod_greensleeves_thx.h"
+#include "mod_nitabrowski.h"
+
+int GameAssets_getMusic(uint8_t id, const char **outData, int *outSize)
+{
+    switch (id)
+    {
+        case 0: *outData = moddata_1987_tune; *outSize = moddata_1987_tune_size; return 1;
+        case 1: *outData = moddata_2_core; *outSize = moddata_2_core_size; return 1;
+        case 2: *outData = moddata_4mat_wizardry; *outSize = moddata_4mat_wizardry_size; return 1;
+        case 3: *outData = moddata_greensleeves_thx; *outSize = moddata_greensleeves_thx_size; return 1;
+        case 4: *outData = moddata_nitabrowski; *outSize = moddata_nitabrowski_size; return 1;
+
+    }
+    return 0;
 }
