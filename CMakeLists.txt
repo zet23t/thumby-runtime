@@ -50,7 +50,6 @@ pico_sdk_init()
 file(GLOB GAME_CODE_SOURCES "game/*.c")
 file(GLOB GAME_ASSET_SOURCES "_src_gen/*.c")
 
-
 add_executable(blink
     blink.c
     engine_audio.c
@@ -59,7 +58,7 @@ add_executable(blink
     )
 
 # pull in common dependencies
-target_link_libraries(blink pico_stdlib hardware_dma hardware_spi pico_stdio_usb)
+target_link_libraries(blink pico_stdlib hardware_dma hardware_spi pico_stdio_usb pico_multicore)
 
 if (PICO_CYW43_SUPPORTED)
     target_link_libraries(blink pico_cyw43_arch_none)

@@ -10,8 +10,8 @@
 
 typedef struct SoundBuffer
 {
-    uint16_t samplesA[ENGINE_AUDIO_BUFFER_SIZE];
-    uint16_t samplesB[ENGINE_AUDIO_BUFFER_SIZE];
+    int16_t samplesA[ENGINE_AUDIO_BUFFER_SIZE];
+    int16_t samplesB[ENGINE_AUDIO_BUFFER_SIZE];
     uint8_t currentAudioBank;
     uint8_t bufferReady;
 } SoundBuffer;

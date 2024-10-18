@@ -9,6 +9,7 @@
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
+#include <pico/multicore.h>
 #include "game/TE_Image.h"
 #include "hardware/gpio.h"
 #include "engine_audio.h"
@@ -30,12 +31,53 @@
 
 void Audio_init();
 
+void init(RuntimeContext *ctx);
+void update(RuntimeContext *ctx);
+void audioUpdate(AudioContext *audioContext);
+AudioContext* AudioContext_get();
+RuntimeContext* RuntimeContext_get();
+
+void Audio_core()
+{
+    Audio_init();
+    RuntimeContext *ctx = RuntimeContext_get();
+    while (1)
+    {
+
+        if (!soundBuffer.bufferReady)
+        {
+            AudioContext *audioContext = AudioContext_get();
+            uint16_t *buffer = soundBuffer.currentAudioBank ? soundBuffer.samplesA : soundBuffer.samplesB;
+            audioContext->frames = ENGINE_AUDIO_BUFFER_SIZE;
+            audioContext->outBuffer = (char*) buffer;
+            audioContext->sampleRate = 22050;
+            audioContext->sampleSize = 16;
+                
+            for (int i=0;i<5;i++)
+            {
+                audioContext->inSfxInstructions[i] = ctx->outSfxInstructions[i];
+                ctx->outSfxInstructions[i] = (SFXInstruction){0};
+            }
+            memset(buffer, 0, ENGINE_AUDIO_BUFFER_SIZE * 2);
+            audioUpdate(audioContext);
+            for (int i=0;i<5;i++)
+            {
+                ctx->sfxChannelStatus[i] = audioContext->outSfxChannelStatus[i];
+                audioContext->inSfxInstructions[i] = (SFXInstruction){0};
+            }
+            soundBuffer.bufferReady = 1;
+        }
+
+        sleep_ms(1);
+    }
+}
+
 // Perform initialisation
 int pico_led_init(void)
 {
     RuntimeContext_init();
-    Audio_init();
     
+    multicore_launch_core1(Audio_core);
     return PICO_OK;
 }
 
@@ -56,11 +98,6 @@ void pico_set_led(bool led_on, bool g, bool b)
 #include "game/TE_Image.h"
 #include "game/TE_Font.h"
 #include "game/game_assets.h"
-
-void init(RuntimeContext *ctx);
-void update(RuntimeContext *ctx);
-void audioUpdate(AudioContext *audioContext);
-AudioContext* AudioContext_get();
 
 void setRGB(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -140,14 +177,14 @@ int main()
         prevTime = currentTime;
 
         // setRGB(1, 0, 0);
-        uint16_t *currentBuffer = soundBuffer.currentAudioBank ? soundBuffer.samplesB : soundBuffer.samplesA;
+        int16_t *currentBuffer = soundBuffer.currentAudioBank ? soundBuffer.samplesB : soundBuffer.samplesA;
         uint16_t bufferPos = audioWaveUpdateCounter % ENGINE_AUDIO_BUFFER_SIZE;
         TE_Img_fillRect(&img, 0, 0, 128, 64, 0xff000000, (TE_ImgOpState) {});
         for (int i=0;i<128;i++)
         {
             int16_t bufferIndex = i * 8;
-            uint16_t sample = currentBuffer[bufferIndex] >> 11;
-            TE_Img_VLine(&img, i, 32 - sample / 2, sample, 0xffffffff, (TE_ImgOpState) {});
+            int16_t sample = currentBuffer[bufferIndex] / 512;
+            TE_Img_VLine(&img, i, sample + 32, 3, 0xffffffff, (TE_ImgOpState) {});
         }
         TE_Img_VLine(&img, bufferPos / 4, 0, 64, 0xff0000ff, (TE_ImgOpState) {});
         ctx = RuntimeContext_update();
@@ -238,30 +275,6 @@ int main()
         if (ctx->inputUp)
         {
             ctx->rgbLightGreen |= ctx->rgbLightRed = 1;
-        }
-
-        if (!soundBuffer.bufferReady)
-        {
-            AudioContext *audioContext = AudioContext_get();
-            uint16_t *buffer = soundBuffer.currentAudioBank ? soundBuffer.samplesA : soundBuffer.samplesB;
-            audioContext->frames = ENGINE_AUDIO_BUFFER_SIZE;
-            audioContext->outBuffer = (char*) buffer;
-            audioContext->sampleRate = 22050;
-            audioContext->sampleSize = 16;
-                
-            for (int i=0;i<5;i++)
-            {
-                audioContext->inSfxInstructions[i] = ctx->outSfxInstructions[i];
-                ctx->outSfxInstructions[i] = (SFXInstruction){0};
-            }
-            memset(buffer, 0, ENGINE_AUDIO_BUFFER_SIZE * 2);
-            audioUpdate(audioContext);
-            for (int i=0;i<5;i++)
-            {
-                ctx->sfxChannelStatus[i] = audioContext->outSfxChannelStatus[i];
-                audioContext->inSfxInstructions[i] = (SFXInstruction){0};
-            }
-            soundBuffer.bufferReady = 1;
         }
 
         // setRGB(0, 1, 0);

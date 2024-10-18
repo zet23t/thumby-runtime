@@ -113,7 +113,8 @@ uint32_t audioWaveUpdateCounter;
 float audioWaveOut;
 void setRGB(uint8_t r, uint8_t g, uint8_t b);
 
-// Samples each channel, adds, normalizes, and sets PWM
+// Samples each channel, adds, normalizes, and sets PWM#
+
 void repeating_audio_callback(void){
     uint16_t currentAudioSamplePosition = audioWaveUpdateCounter % ENGINE_AUDIO_BUFFER_SIZE;
     uint8_t currentAudioBank = audioWaveUpdateCounter / ENGINE_AUDIO_BUFFER_SIZE % 2;
@@ -128,13 +129,20 @@ void repeating_audio_callback(void){
         soundBuffer.bufferReady = 0;
         soundBuffer.currentAudioBank = currentAudioBank;
     }
-    uint16_t *bufferBank = currentAudioBank == 0 ? soundBuffer.samplesA : soundBuffer.samplesB;
-    uint16_t sample = bufferBank[currentAudioSamplePosition];
-    pwm_set_gpio_level(AUDIO_PWM_PIN, 511 - sample >> 7);
+    int16_t *bufferBank = currentAudioBank == 0 ? soundBuffer.samplesA : soundBuffer.samplesB;
+    int16_t sample = bufferBank[currentAudioSamplePosition] / 32 + 256;
+    if (sample < 0)
+    {
+        sample = 0;
+    }
+    else
+    if (sample > 511)
+    {
+        sample = 511;
+    }
+    pwm_set_gpio_level(AUDIO_PWM_PIN, (uint16_t) sample);
     
-    audioWaveOut = (bufferBank[currentAudioSamplePosition] >> 7) / 512.0f;
     audioWaveUpdateCounter++;
-
     pwm_clear_irq(audio_callback_pwm_pin_slice);
 }
 
@@ -191,7 +199,6 @@ void Audio_init()
     pwm_init(audio_callback_pwm_pin_slice, &audio_callback_pwm_pin_config, true);
 
     engine_audio_setup_playback();
-    audioWaveUpdateCounter = 0xff00;
 }
 
 

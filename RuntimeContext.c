@@ -127,6 +127,11 @@ AudioContext* AudioContext_get(){
     return &audioContext;
 }
 
+RuntimeContext* RuntimeContext_get()
+{
+    return &runtimeContext;
+}
+
 RuntimeContext* RuntimeContext_update(){
     float current_time = time_us_32() / 1000000.0f;
     if (runtimeContext.frameCount > 0)
